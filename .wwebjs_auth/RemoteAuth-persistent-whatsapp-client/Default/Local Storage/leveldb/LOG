@@ -1,0 +1,6 @@
+2025/08/28-10:47:38.875 8003 Reusing MANIFEST /Users/apple1/Downloads/WHATSAPP_INTEGRATION/.wwebjs_auth/RemoteAuth-persistent-whatsapp-client/Default/Local Storage/leveldb/MANIFEST-000001
+2025/08/28-10:47:38.876 8003 Recovering log #3
+2025/08/28-10:47:38.876 8003 Reusing old log /Users/apple1/Downloads/WHATSAPP_INTEGRATION/.wwebjs_auth/RemoteAuth-persistent-whatsapp-client/Default/Local Storage/leveldb/000003.log 
+2025/08/28-10:49:39.409 a503 Level-0 table #5: started
+2025/08/28-10:49:39.432 a503 Level-0 table #5: 21756 bytes OK
+2025/08/28-10:49:39.471 a503 Delete type=0 #3

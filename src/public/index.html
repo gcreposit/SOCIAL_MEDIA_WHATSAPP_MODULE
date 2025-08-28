@@ -1,0 +1,280 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>WhatsApp Message Capture System</title>
+  <link rel="stylesheet" href="/css/styles.css">
+  <style>
+    .message-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 20px;
+    }
+    
+    .message-table th, .message-table td {
+      border: 1px solid #ddd;
+      padding: 8px 12px;
+      text-align: left;
+    }
+    
+    .message-table th {
+      background-color: #f2f2f2;
+      position: sticky;
+      top: 0;
+    }
+    
+    .message-table tr:nth-child(even) {
+      background-color: #f9f9f9;
+    }
+    
+    .message-table tr:hover {
+      background-color: #f1f1f1;
+    }
+    
+    .table-container {
+      max-height: 600px;
+      overflow-y: auto;
+      margin-top: 20px;
+    }
+    
+    .filter-container {
+      display: flex;
+      gap: 15px;
+      margin-bottom: 15px;
+      align-items: center;
+    }
+    
+    .filter-container select, .filter-container input {
+      padding: 8px;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>WhatsApp Message Capture System</h1>
+      <p>Monitor and view messages from WhatsApp groups</p>
+      <nav>
+        <a href="/" class="active">Table View</a> | 
+        <a href="/dashboard.html">Dashboard View</a>
+      </nav>
+    </header>
+
+    <div class="main-content">
+      <div class="filter-container">
+        <select id="group-filter">
+          <option value="all">All Groups</option>
+          <!-- Groups will be populated here -->
+        </select>
+        <input type="text" id="search-input" placeholder="Search messages...">
+      </div>
+      
+      <div class="table-container">
+        <table class="message-table">
+          <thead>
+            <tr>
+              <th>Group Name</th>
+              <th>Sender Name</th>
+              <th>Message Text</th>
+              <th>Date & Time</th>
+            </tr>
+          </thead>
+          <tbody id="message-table-body">
+            <!-- Messages will be populated here -->
+            <tr>
+              <td colspan="4" class="loading">Loading messages...</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- Socket.io client -->
+  <script src="/socket.io/socket.io.js"></script>
+  <!-- Table View JavaScript -->
+  <script>
+    // Connect to Socket.io server
+    const socket = io();
+    
+    // DOM elements
+    const messageTableBody = document.getElementById('message-table-body');
+    const groupFilter = document.getElementById('group-filter');
+    const searchInput = document.getElementById('search-input');
+    
+    // State
+    let messages = [];
+    let groups = [];
+    let currentFilter = 'all';
+    let searchTerm = '';
+    
+    // Initialize the application
+    document.addEventListener('DOMContentLoaded', () => {
+      // Load messages
+      loadMessages();
+      
+      // Load groups for filter
+      loadGroups();
+      
+      // Set up event listeners
+      setupEventListeners();
+      
+      // Set up Socket.io event handlers
+      setupSocketHandlers();
+    });
+    
+    /**
+     * Load all messages from the API
+     */
+    async function loadMessages() {
+      try {
+        const response = await fetch('/api/messages');
+        if (!response.ok) throw new Error('Failed to fetch messages');
+        
+        messages = await response.json();
+        renderMessages(messages);
+      } catch (error) {
+        console.error('Error loading messages:', error);
+        messageTableBody.innerHTML = '<tr><td colspan="4" class="error">Failed to load messages</td></tr>';
+      }
+    }
+    
+    /**
+     * Load all groups from the API
+     */
+    async function loadGroups() {
+      try {
+        const response = await fetch('/api/groups');
+        if (!response.ok) throw new Error('Failed to fetch groups');
+        
+        groups = await response.json();
+        populateGroupFilter(groups);
+      } catch (error) {
+        console.error('Error loading groups:', error);
+      }
+    }
+    
+    /**
+     * Populate group filter dropdown
+     */
+    function populateGroupFilter(groupsData) {
+      groupsData.forEach(group => {
+        const option = document.createElement('option');
+        option.value = group.group_id;
+        option.textContent = group.group_name || 'Unknown Group';
+        groupFilter.appendChild(option);
+      });
+    }
+    
+    /**
+     * Set up event listeners
+     */
+    function setupEventListeners() {
+      // Group filter change
+      groupFilter.addEventListener('change', () => {
+        currentFilter = groupFilter.value;
+        filterMessages();
+      });
+      
+      // Search input
+      searchInput.addEventListener('input', () => {
+        searchTerm = searchInput.value.toLowerCase();
+        filterMessages();
+      });
+    }
+    
+    /**
+     * Set up Socket.io event handlers
+     */
+    function setupSocketHandlers() {
+      // New message event
+      socket.on('new-message', (message) => {
+        // Add new message to the array
+        messages.unshift(message);
+        
+        // Re-render messages with filters applied
+        filterMessages();
+      });
+    }
+    
+    /**
+     * Filter messages based on current filter and search term
+     */
+    function filterMessages() {
+      let filteredMessages = messages;
+      
+      // Apply group filter
+      if (currentFilter !== 'all') {
+        filteredMessages = filteredMessages.filter(msg => msg.group_id === currentFilter);
+      }
+      
+      // Apply search filter
+      if (searchTerm) {
+        filteredMessages = filteredMessages.filter(msg => 
+          msg.message_text.toLowerCase().includes(searchTerm) || 
+          msg.sender_name.toLowerCase().includes(searchTerm) ||
+          msg.group_name.toLowerCase().includes(searchTerm)
+        );
+      }
+      
+      renderMessages(filteredMessages);
+    }
+    
+    /**
+     * Render messages in the table
+     */
+    function renderMessages(messageData) {
+      // Clear table
+      messageTableBody.innerHTML = '';
+      
+      if (messageData.length === 0) {
+        messageTableBody.innerHTML = '<tr><td colspan="4" class="no-messages">No messages found</td></tr>';
+        return;
+      }
+      
+      // Create message rows
+      messageData.forEach(message => {
+        const row = document.createElement('tr');
+        
+        // Group name cell
+        const groupCell = document.createElement('td');
+        groupCell.textContent = message.group_name || 'Unknown Group';
+        row.appendChild(groupCell);
+        
+        // Sender name cell
+        const senderCell = document.createElement('td');
+        senderCell.textContent = message.sender_name || 'Unknown';
+        row.appendChild(senderCell);
+        
+        // Message text cell
+        const messageCell = document.createElement('td');
+        messageCell.textContent = message.message_text;
+        row.appendChild(messageCell);
+        
+        // Date & time cell
+        const dateCell = document.createElement('td');
+        dateCell.textContent = formatDateTime(new Date(message.timestamp));
+        row.appendChild(dateCell);
+        
+        messageTableBody.appendChild(row);
+      });
+    }
+    
+    /**
+     * Format date and time as dd/mm/yyyy HH:MM
+     */
+    function formatDateTime(date) {
+      const day = String(date.getDate()).padStart(2, '0');
+      const month = String(date.getMonth() + 1).padStart(2, '0');
+      const year = date.getFullYear();
+      const hours = String(date.getHours()).padStart(2, '0');
+      const minutes = String(date.getMinutes()).padStart(2, '0');
+      
+      return `${day}/${month}/${year} ${hours}:${minutes}`;
+    }
+  </script>
+</body>
+</html>

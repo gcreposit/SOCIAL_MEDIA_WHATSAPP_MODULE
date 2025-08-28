@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>WhatsApp Message Capture System</title>
+  <link rel="stylesheet" href="/css/styles.css">
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>WhatsApp Message Capture System</h1>
+      <p>Monitor and view messages from WhatsApp groups</p>
+      <nav>
+        <a href="/" class="active">Table View</a> | 
+        <a href="/dashboard.html">Dashboard View</a>
+      </nav>
+    </header>
+
+    <div class="main-content">
+      <div class="groups-panel">
+        <h2>Groups</h2>
+        <div class="search-box">
+          <input type="text" id="group-search" placeholder="Search groups...">
+        </div>
+        <ul id="groups-list" class="groups-list">
+          <!-- Groups will be populated here -->
+          <li class="loading">Loading groups...</li>
+        </ul>
+      </div>
+
+      <div class="messages-panel">
+        <div class="messages-header">
+          <h2 id="current-group">Select a group</h2>
+          <span id="message-count" class="message-count">0 messages</span>
+        </div>
+        <div id="messages-container" class="messages-container">
+          <!-- Messages will be populated here -->
+          <div class="no-messages">Select a group to view messages</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Message template -->
+  <template id="message-template">
+    <div class="message">
+      <div class="message-header">
+        <span class="sender-name"></span>
+        <span class="timestamp"></span>
+      </div>
+      <div class="message-body"></div>
+      <!-- Attachments will be added here dynamically -->
+    </div>
+  </template>
+
+  <!-- Group template -->
+  <template id="group-template">
+    <li class="group-item">
+      <div class="group-name"></div>
+      <div class="group-info">
+        <span class="message-count"></span>
+        <span class="last-message-time"></span>
+      </div>
+    </li>
+  </template>
+
+  <!-- Socket.io client -->
+  <script src="/socket.io/socket.io.js"></script>
+  <!-- Main JavaScript -->
+  <script src="/js/main.js"></script>
+</body>
+</html>

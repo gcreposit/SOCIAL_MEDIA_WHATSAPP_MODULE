@@ -1,0 +1,268 @@
+/* Main Styles for WhatsApp Message Capture System */
+
+/* Reset and base styles */
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  line-height: 1.6;
+  color: #333;
+  background-color: #f0f2f5;
+}
+
+.container {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 20px;
+}
+
+/* Header styles */
+header {
+  text-align: center;
+  padding: 20px 0;
+  margin-bottom: 20px;
+  border-bottom: 1px solid #ddd;
+}
+
+header h1 {
+  color: #128C7E; /* WhatsApp green */
+  margin-bottom: 5px;
+}
+
+header p {
+  color: #666;
+}
+
+/* Navigation styles */
+nav {
+  margin-top: 15px;
+}
+
+nav a {
+  color: #128C7E;
+  text-decoration: none;
+  padding: 5px 10px;
+  border-radius: 4px;
+  transition: background-color 0.2s;
+}
+
+nav a:hover {
+  background-color: #e9f5f3;
+}
+
+nav a.active {
+  font-weight: bold;
+  background-color: #e9f5f3;
+}
+
+/* Main content layout */
+.main-content {
+  display: flex;
+  height: calc(100vh - 150px);
+  border-radius: 10px;
+  overflow: hidden;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+}
+
+/* Groups panel */
+.groups-panel {
+  width: 30%;
+  background-color: #fff;
+  border-right: 1px solid #ddd;
+  display: flex;
+  flex-direction: column;
+}
+
+.groups-panel h2 {
+  padding: 15px;
+  border-bottom: 1px solid #ddd;
+  color: #128C7E;
+}
+
+.search-box {
+  padding: 10px 15px;
+  border-bottom: 1px solid #ddd;
+}
+
+.search-box input {
+  width: 100%;
+  padding: 8px 12px;
+  border: 1px solid #ddd;
+  border-radius: 20px;
+  outline: none;
+  font-size: 14px;
+}
+
+.search-box input:focus {
+  border-color: #128C7E;
+}
+
+.groups-list {
+  list-style: none;
+  overflow-y: auto;
+  flex-grow: 1;
+}
+
+.group-item {
+  padding: 15px;
+  border-bottom: 1px solid #f0f0f0;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.group-item:hover {
+  background-color: #f5f5f5;
+}
+
+.group-item.active {
+  background-color: #e6f7ff;
+  border-left: 3px solid #128C7E;
+}
+
+.group-name {
+  font-weight: bold;
+  margin-bottom: 5px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.group-info {
+  display: flex;
+  justify-content: space-between;
+  font-size: 12px;
+  color: #666;
+}
+
+/* Messages panel */
+.messages-panel {
+  width: 70%;
+  display: flex;
+  flex-direction: column;
+  background-color: #fff;
+}
+
+.messages-header {
+  padding: 15px;
+  border-bottom: 1px solid #ddd;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.messages-header h2 {
+  color: #128C7E;
+}
+
+.message-count {
+  background-color: #128C7E;
+  color: white;
+  padding: 3px 8px;
+  border-radius: 10px;
+  font-size: 12px;
+}
+
+.messages-container {
+  flex-grow: 1;
+  overflow-y: auto;
+  padding: 15px;
+  background-color: #e5ddd5; /* WhatsApp chat background */
+/* Message styles */
+.message {
+  background-color: #fff;
+  border-radius: 8px;
+  padding: 12px;
+  margin-bottom: 15px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+  max-width: 80%;
+}
+
+/* Attachment styles */
+.message-attachments {
+  margin-top: 10px;
+  border-top: 1px solid #eee;
+  padding-top: 10px;
+}
+
+.image-attachment {
+  margin-bottom: 10px;
+}
+
+.image-attachment img {
+  border-radius: 5px;
+  cursor: pointer;
+  transition: transform 0.2s;
+}
+
+.image-attachment img:hover {
+  transform: scale(1.05);
+}
+
+.document-attachment {
+  margin-top: 5px;
+}
+
+.document-link {
+  display: inline-block;
+  padding: 5px 10px;
+  background-color: #128C7E;
+  color: white;
+  text-decoration: none;
+  border-radius: 4px;
+  font-size: 14px;
+}
+
+.document-link:hover {
+  background-color: #0d6d63;
+}
+
+.message-header {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 5px;
+  padding: 0;
+  border: none;
+}
+
+.sender-name {
+  font-weight: bold;
+  color: #128C7E;
+}
+
+.timestamp {
+  font-size: 12px;
+  color: #999;
+}
+
+.message-body {
+  word-break: break-word;
+}
+
+/* Loading and empty states */
+.loading, .no-messages {
+  padding: 20px;
+  text-align: center;
+  color: #666;
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+  .main-content {
+    flex-direction: column;
+    height: auto;
+  }
+  
+  .groups-panel, .messages-panel {
+    width: 100%;
+    height: 50vh;
+  }
+  
+  .groups-panel {
+    border-right: none;
+    border-bottom: 1px solid #ddd;
+  }
+}

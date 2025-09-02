@@ -62,5 +62,63 @@ module.exports = function(dbService) {
     }
   });
 
+  /**
+   * Get WhatsApp authentication status and QR code
+   * GET /api/whatsapp/status
+   */
+  router.get('/whatsapp/status', async (req, res) => {
+    try {
+      console.log('API: Status request received');
+      console.log('API: global.app exists:', !!global.app);
+      console.log('API: global.app.whatsappClient exists:', !!global.app?.whatsappClient);
+      
+      // Get WhatsApp client instance from global app
+      const whatsappClient = global.app?.whatsappClient;
+      
+      if (!whatsappClient) {
+        console.log('API: WhatsApp client not initialized');
+        return res.json({
+          authenticated: false,
+          message: 'WhatsApp client not initialized'
+        });
+      }
+      
+      console.log('API: Calling getAuthStatus...');
+      const status = whatsappClient.getAuthStatus();
+      console.log('API: Returning status:', JSON.stringify(status, null, 2));
+      res.json(status);
+    } catch (error) {
+      console.error('Error getting WhatsApp status:', error);
+      res.status(500).json({ 
+        authenticated: false,
+        error: 'Failed to get WhatsApp status' 
+      });
+    }
+  });
+
+  /**
+   * Refresh QR code
+   * POST /api/whatsapp/refresh-qr
+   */
+  router.post('/whatsapp/refresh-qr', async (req, res) => {
+    try {
+      const whatsappClient = global.app?.whatsappClient;
+      
+      if (!whatsappClient) {
+        return res.status(400).json({
+          error: 'WhatsApp client not initialized'
+        });
+      }
+      
+      await whatsappClient.refreshQRCode();
+      res.json({ success: true, message: 'QR code refresh requested' });
+    } catch (error) {
+      console.error('Error refreshing QR code:', error);
+      res.status(500).json({ 
+        error: 'Failed to refresh QR code' 
+      });
+    }
+  });
+
   return router;
 };

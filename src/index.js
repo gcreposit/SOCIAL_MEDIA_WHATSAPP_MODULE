@@ -84,8 +84,22 @@ class WhatsAppGroupCapture {
         
         // Schedule another force initialization attempt for backend-only mode
         if (forceInitialization) {
+          const nextAttemptTime = new Date(Date.now() + 60000);
           console.log('Scheduling another force initialization attempt in 60 seconds...');
+          console.log(`⏰ Next attempt will be at: ${nextAttemptTime.toLocaleTimeString()}`);
+          
+          // Add a countdown timer
+          let countdown = 60;
+          const countdownInterval = setInterval(() => {
+            countdown--;
+            if (countdown > 0 && countdown % 10 === 0) {
+              console.log(`⏳ Next group initialization attempt in ${countdown} seconds...`);
+            }
+          }, 1000);
+          
           setTimeout(() => {
+            clearInterval(countdownInterval);
+            console.log('🔄 60 seconds elapsed - attempting group initialization now...');
             this.testGroupAccess(true);
           }, 60000);
         }

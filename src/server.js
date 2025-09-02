@@ -61,6 +61,11 @@ class Server {
     this.app.get('/table', (req, res) => {
       res.sendFile(path.join(__dirname, 'public', 'table.html'));
     });
+    
+    // QR code authentication route
+    this.app.get('/qr', (req, res) => {
+      res.sendFile(path.join(__dirname, 'public', 'qr.html'));
+    });
   }
   
   /**

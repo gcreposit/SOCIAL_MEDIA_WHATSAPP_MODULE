@@ -8,6 +8,7 @@ const { Client, LocalAuth, RemoteAuth } = require('whatsapp-web.js');
 const { MongoStore } = require('wwebjs-mongo');
 const mongoose = require('mongoose');
 const qrcode = require('qrcode-terminal');
+const QRCode = require('qrcode');
 const path = require('path');
 const fs = require('fs');
 const os = require('os');
@@ -34,17 +35,24 @@ class PersistentWhatsAppClient {
     this.connectionCheckCount = 0;
     this.partialGroupRefreshScheduled = false;
     this.groupInitializationAttempts = 0;
-    
+
     // Enhanced session management for large-scale operation
     this.useRemoteAuth = process.env.USE_REMOTE_AUTH === 'true';
     this.mongoUri = process.env.MONGODB_URI;
-    
+
     // Persistent connection settings optimized for 400+ groups
     this.persistentMode = true;
     this.heartbeatInterval = 90000; // Increased from 60 to 90 seconds for large-scale operation
     this.maxIdleTime = 15 * 60 * 1000; // Increased from 10 to 15 minutes for large-scale operation
     this.aggressiveReconnect = false; // Changed to false to reduce aggressive reconnection
+
+    // QR Code management for web interface
+    this.currentQRCode = null;
+    this.qrCodeBase64 = null;
+    this.lastQRCodeTime = null;
   }
+
+  
 
   /**
    * Initialize with persistent connection strategy and session locking
@@ -52,24 +60,24 @@ class PersistentWhatsAppClient {
   async initializeClient(forceNewSession = false) {
     // Create a lock file to prevent multiple instances from using the same session
     const lockFilePath = path.join(this.sessionPath, 'session.lock');
-    
+
     try {
       console.log('🚀 Initializing Persistent WhatsApp Client...');
-      
+
       // Ensure proper file permissions for session storage
       await this.ensureProperPermissions();
-      
+
       // Check if lock file exists and is recent (less than 5 minutes old)
       if (fs.existsSync(lockFilePath)) {
         try {
           const lockStats = fs.statSync(lockFilePath);
           const lockAge = Date.now() - lockStats.mtimeMs;
-          
+
           // If lock is recent (less than 5 minutes old), another instance might be running
           if (lockAge < 5 * 60 * 1000) {
             console.log('⚠️ Session lock file found! Another instance might be running');
             console.log(`⏱️ Lock file age: ${Math.round(lockAge / 1000)}s`);
-            
+
             // If lock is very recent (less than 30 seconds), wait and retry
             if (lockAge < 30 * 1000) {
               console.log('⏳ Lock file is very recent, waiting 30s before attempting to take over...');
@@ -82,14 +90,14 @@ class PersistentWhatsAppClient {
           console.log('⚠️ Error reading lock file:', lockError.message);
         }
       }
-      
+
       // Create or update lock file
       try {
         // Ensure directory exists
         if (!fs.existsSync(this.sessionPath)) {
           fs.mkdirSync(this.sessionPath, { recursive: true, mode: 0o755 });
         }
-        
+
         // Write process info to lock file
         const lockData = JSON.stringify({
           pid: process.pid,
@@ -101,7 +109,7 @@ class PersistentWhatsAppClient {
       } catch (lockError) {
         console.log('⚠️ Could not create lock file:', lockError.message);
       }
-      
+
       // Only clear session if explicitly forced (manual logout detected)
       if (forceNewSession) {
         console.log('🧹 Force clearing session due to logout detection...');
@@ -118,7 +126,7 @@ class PersistentWhatsAppClient {
       await this.destroyExistingClient();
       await this.createNewClient();
       await this.startClient();
-      
+
       return true;
     } catch (error) {
       console.error('❌ Client initialization failed:', error);
@@ -129,7 +137,7 @@ class PersistentWhatsAppClient {
       if (this.lockRefreshInterval) {
         clearInterval(this.lockRefreshInterval);
       }
-      
+
       this.lockRefreshInterval = setInterval(() => {
         try {
           if (fs.existsSync(lockFilePath)) {
@@ -172,15 +180,15 @@ class PersistentWhatsAppClient {
         console.log('📁 Using RemoteAuth with MongoDB, session persistence handled remotely');
         return true;
       }
-      
+
       if (!fs.existsSync(this.sessionPath)) return false;
-      
+
       // Look for session files that indicate authentication
       const sessionFiles = fs.readdirSync(this.sessionPath);
-      const hasSessionFiles = sessionFiles.some(file => 
+      const hasSessionFiles = sessionFiles.some(file =>
         file.includes('session') || file.includes('auth') || file.includes('.json')
       );
-      
+
       console.log(`📁 Session files found: ${hasSessionFiles ? 'Yes' : 'No'}`);
       return hasSessionFiles;
     } catch (error) {
@@ -197,15 +205,15 @@ class PersistentWhatsAppClient {
       try {
         console.log('🔄 Destroying existing client...');
         this.stopConnectionMonitoring();
-        
+
         // Add timeout to prevent hanging on destroy
         await Promise.race([
           this.client.destroy(),
-          new Promise((_, reject) => 
+          new Promise((_, reject) =>
             setTimeout(() => reject(new Error('Client destroy timeout')), 30000) // 30 second timeout
           )
         ]);
-        
+
         console.log('✅ Existing client destroyed');
       } catch (error) {
         console.log('⚠️ Error destroying existing client:', error.message);
@@ -228,20 +236,46 @@ class PersistentWhatsAppClient {
    */
   async createNewClient() {
     console.log('🔧 Creating new WhatsApp client...');
-    
+
     let authStrategy;
-    
+
     // Use RemoteAuth with MongoDB if configured
     if (this.useRemoteAuth) {
       try {
         console.log('🔄 Attempting to connect to MongoDB for RemoteAuth...');
-        await mongoose.connect(this.mongoUri);
-        const store = new MongoStore({ mongoose: mongoose });
+        
+        // Ensure MongoDB connection with proper options
+        const mongooseOptions = {
+          serverSelectionTimeoutMS: 10000, // 10 seconds timeout for server selection
+          socketTimeoutMS: 45000, // 45 seconds timeout for socket operations
+          connectTimeoutMS: 30000 // 30 seconds timeout for initial connection
+          // Removed keepAlive options that are not supported
+        };
+        
+        // Close existing connection if exists
+        if (mongoose.connection.readyState !== 0) {
+          console.log('🔄 Closing existing MongoDB connection before reconnecting...');
+          await mongoose.connection.close();
+        }
+        
+        await mongoose.connect(this.mongoUri, mongooseOptions);
+        console.log('✅ MongoDB connected successfully');
+        
+        // Create store with explicit collection name to ensure proper creation
+        const store = new MongoStore({
+          mongoose: mongoose,
+          collectionName: 'whatsapp-RemoteAuth-persistent-whatsapp-client'
+        });
+        
+        // Initialize RemoteAuth with more robust settings
         authStrategy = new RemoteAuth({
           store: store,
           backupSyncIntervalMs: 300000, // 5 minutes
-          clientId: 'persistent-whatsapp-client'
+          clientId: 'persistent-whatsapp-client',
+          dataPath: this.sessionPath,
+          rmMaxRetries: 10 // Increase max retries for remote auth
         });
+        
         console.log('✅ Using RemoteAuth with MongoDB for better session persistence');
       } catch (mongoError) {
         console.warn('⚠️ MongoDB connection failed, falling back to LocalAuth:', mongoError.message);
@@ -250,7 +284,7 @@ class PersistentWhatsAppClient {
     } else {
       authStrategy = this.createLocalAuthStrategy();
     }
-    
+
     this.client = new Client({
       authStrategy: authStrategy,
       puppeteer: {
@@ -305,11 +339,71 @@ class PersistentWhatsAppClient {
   // -----------------------BACKUP KI STRATEGY YHNI PE LGA DIJIYE------------------------------------------
 
   /**
-   * Start the client with retry logic
+   * Start the client with retry logic and ensure proper initialization
    */
   async startClient() {
     console.log('▶️ Starting WhatsApp client...');
-    await this.client.initialize();
+    
+    try {
+      // Add a longer delay before initialization to ensure MongoDB connection is fully established
+      if (this.useRemoteAuth) {
+        console.log('⏳ Adding delay before initialization to ensure MongoDB connection is ready...');
+        // Increase delay to 5 seconds to ensure MongoDB is fully ready
+        await new Promise(resolve => setTimeout(resolve, 5000));
+        console.log('✅ Delay completed, proceeding with initialization');
+      }
+      
+      // Set a timeout for initialization to prevent hanging
+      const initPromise = this.client.initialize();
+      const timeoutPromise = new Promise((_, reject) => {
+        setTimeout(() => reject(new Error('Client initialization timed out after 60 seconds')), 60000);
+      });
+      
+      await Promise.race([initPromise, timeoutPromise]);
+      console.log('✅ Client initialized successfully');
+      
+      // If using RemoteAuth, verify collections were created
+      if (this.useRemoteAuth && mongoose.connection.readyState === 1) {
+        console.log('🔍 Verifying RemoteAuth collections...');
+        const db = mongoose.connection.db;
+        const collections = await db.listCollections().toArray();
+        const collectionNames = collections.map(c => c.name);
+        
+        console.log('📊 Available collections:', collectionNames.join(', '));
+        
+        // Check for RemoteAuth collections
+        const hasFilesCollection = collectionNames.includes('whatsapp-RemoteAuth-persistent-whatsapp-client.files');
+        const hasChunksCollection = collectionNames.includes('whatsapp-RemoteAuth-persistent-whatsapp-client.chunks');
+        
+        if (!hasFilesCollection || !hasChunksCollection) {
+          console.log('⚠️ RemoteAuth collections not found. They will be created when the session is first saved.');
+          console.log('🔄 Forcing a session save to create collections...');
+          // Force a session save to create collections
+          if (this.client.authStrategy && typeof this.client.authStrategy.save === 'function') {
+            try {
+              await this.client.authStrategy.save();
+              console.log('✅ Forced session save completed');
+            } catch (saveError) {
+              console.warn('⚠️ Failed to force session save:', saveError.message);
+            }
+          }
+        } else {
+          console.log('✅ RemoteAuth collections verified.');
+        }
+      }
+    } catch (error) {
+      console.error('❌ Client initialization failed:', error);
+      // If initialization fails, try to clean up any partial state
+      try {
+        if (this.client) {
+          console.log('🧹 Attempting to clean up failed client...');
+          await this.destroyExistingClient();
+        }
+      } catch (cleanupError) {
+        console.error('⚠️ Cleanup after failed initialization also failed:', cleanupError);
+      }
+      throw error; // Propagate error to caller
+    }
   }
 
   /**
@@ -317,17 +411,38 @@ class PersistentWhatsAppClient {
    */
   registerPersistentEventHandlers() {
     // QR Code - only show if not authenticated
-    this.client.on('qr', (qr) => {
+    this.client.on('qr', async (qr) => {
       if (!this.isAuthenticated) {
         console.log('📱 QR code for authentication:');
         console.log(qr); // Log the raw QR code string for backend-only implementation
-        
+
+        // Store QR code for web interface
+        this.currentQRCode = qr;
+        this.lastQRCodeTime = new Date();
+
+        try {
+          // Generate base64 QR code for web interface
+          this.qrCodeBase64 = await QRCode.toDataURL(qr, {
+            width: 300,
+            margin: 2,
+            color: {
+              dark: '#000000',
+              light: '#FFFFFF'
+            }
+          });
+          console.log('✅ QR code generated for web interface');
+        } catch (qrError) {
+          console.error('❌ Error generating QR code for web:', qrError);
+          this.qrCodeBase64 = null;
+        }
+
         // Generate terminal QR code for server environments
         qrcode.generate(qr, { small: true });
-        
+
         // Log instructions for backend-only implementation
         console.log('⏳ For backend-only implementation: Copy this QR code and scan it with your WhatsApp app');
         console.log('⏳ You can also use a QR code generator with the string above');
+        console.log('🌐 Or visit http://localhost:3000/qr to scan the QR code in your browser');
       }
     });
 
@@ -336,73 +451,166 @@ class PersistentWhatsAppClient {
       console.log('🔐 WhatsApp authenticated successfully!');
       this.isAuthenticated = true;
       this.reconnectAttempts = 0; // Reset on successful auth
+      this.clearQRCode(); // Clear QR code data since we're now authenticated
     });
 
     // Ready event
-    // Ready event - with improved group initialization timing
-this.client.on('ready', async () => {
-  console.log('✅ WhatsApp client is ready and connected!');
-  this.isClientReady = true;
-  this.isAuthenticated = true;
-  this.lastHeartbeat = new Date();
-  
-  // Get business info
-  try {
-    const info = this.client.info;
-    this.businessPhoneNumber = info.wid.user;
-    console.log(`📞 Connected as: ${this.businessPhoneNumber}`);
-    console.log(`👤 Display name: ${info.pushname}`);
-  } catch (error) {
-    console.log('⚠️ Could not get business info immediately:', error.message);
-  }
-  
-  // Reset reconnection attempts
-  this.reconnectAttempts = 0;
-  
-  // Start persistent connection monitoring
-  this.startConnectionMonitoring();
-  
-  // Initialize groups with progressive retry strategy for backend-only mode
-  console.log('⏳ Waiting for WhatsApp Web to fully synchronize...');
-  
-  // First attempt after short delay
-  setTimeout(async () => {
-    try {
-      const groups = await this.initializeGroups(1, 5);
-      if (groups.length === 0) {
-        console.log('⏳ No groups found on first attempt, scheduling additional attempts...');
+    // Ready event - with improved group initialization timing and session persistence
+    this.client.on('ready', async () => {
+      console.log('✅ WhatsApp client is ready and connected!');
+      this.isClientReady = true;
+      this.isAuthenticated = true;
+      this.lastHeartbeat = new Date();
+      this.clearQRCode(); // Clear QR code when ready
+
+      // Get business info
+      try {
+        const info = this.client.info;
+        this.businessPhoneNumber = info.wid.user;
+        console.log(`📞 Connected as: ${this.businessPhoneNumber}`);
+        console.log(`👤 Display name: ${info.pushname}`);
+      } catch (error) {
+        console.log('⚠️ Could not get business info immediately:', error.message);
+      }
+
+      // Reset reconnection attempts
+      this.reconnectAttempts = 0;
+      
+      // Ensure RemoteAuth session is saved if using MongoDB
+      if (this.useRemoteAuth && mongoose.connection.readyState === 1) {
+        try {
+          console.log('💾 Ensuring RemoteAuth session is properly saved...');
+          
+          // Force a session save by triggering a small state change
+          // This helps ensure the collections are created
+          if (this.client.authStrategy && typeof this.client.authStrategy.save === 'function') {
+            await this.client.authStrategy.save();
+            console.log('✅ RemoteAuth session save triggered');
+            
+            // Verify collections after save
+            const db = mongoose.connection.db;
+            const collections = await db.listCollections().toArray();
+            const collectionNames = collections.map(c => c.name);
+            
+            console.log('📊 Collections after save:', collectionNames.join(', '));
+          }
+        } catch (saveError) {
+          console.error('⚠️ Error ensuring session persistence:', saveError.message);
+          // Continue despite error - non-critical operation
+        }
+      }
+
+      // Start persistent connection monitoring
+      this.startConnectionMonitoring();
+
+      // Initialize groups with a more efficient retry strategy
+      console.log('⏳ Waiting for WhatsApp Web to fully synchronize...');
+      
+      // Track group initialization attempts
+      this.groupInitAttempts = 0;
+      this.maxGroupInitAttempts = 3; // Limit to 3 attempts total
+      
+      // First, ensure the client is fully initialized by checking its state
+      const ensureClientFullyInitialized = () => {
+        return new Promise(resolve => {
+          // If client is already in CONNECTED state, resolve immediately
+          if (this.client.pupPage && this.client.pupBrowser) {
+            console.log('✅ Client appears to be fully initialized');
+            resolve();
+            return;
+          }
+          
+          console.log('⏳ Waiting for client to be fully initialized...');
+          
+          // Set a timeout to resolve anyway after 30 seconds
+          const timeout = setTimeout(() => {
+            console.log('⚠️ Client initialization wait timed out after 30 seconds, proceeding anyway');
+            resolve();
+          }, 30000);
+          
+          // Listen for the change_state event to detect when client is fully connected
+          const stateHandler = (state) => {
+            if (state === 'CONNECTED') {
+              console.log('✅ Client is now fully connected');
+              clearTimeout(timeout);
+              this.client.removeListener('change_state', stateHandler);
+              resolve();
+            }
+          };
+          
+          this.client.on('change_state', stateHandler);
+        });
+      };
+      
+      const attemptGroupInit = async (delayMs, attempt) => {
+        if (attempt > this.maxGroupInitAttempts) {
+          console.log('⚠️ Reached maximum group initialization attempts. Will continue without all groups.');
+          return;
+        }
         
-        // Second attempt after longer delay if first attempt found no groups
+        console.log(`⏳ Scheduling group initialization attempt ${attempt} in ${delayMs/1000} seconds...`);
+        
         setTimeout(async () => {
           try {
-            await this.initializeGroups(1, 5);
-          } catch (secondError) {
-            console.error('❌ Second group loading attempt failed:', secondError.message);
+            // Ensure client is fully initialized before attempting to get groups
+            await ensureClientFullyInitialized();
+            
+            console.log(`🔄 Attempt ${attempt}/${this.maxGroupInitAttempts} to initialize groups...`);
+            const groups = await this.initializeGroups(1, 5);
+            
+            if (groups.length === 0 && attempt < this.maxGroupInitAttempts) {
+              console.log(`⏳ No groups found on attempt ${attempt}, scheduling next attempt...`);
+              // Exponential backoff for retry delays
+              const nextDelay = Math.min(delayMs * 1.5, 120000); // Cap at 2 minutes
+              attemptGroupInit(nextDelay, attempt + 1);
+            } else if (groups.length > 0) {
+              console.log(`✅ Successfully loaded ${groups.length} groups on attempt ${attempt}`);
+            } else {
+              console.log('⚠️ No groups found after all attempts. Check WhatsApp connection and group membership.');
+            }
+          } catch (error) {
+            console.error(`❌ Group loading attempt ${attempt} failed:`, error.message);
+            
+            if (attempt < this.maxGroupInitAttempts) {
+              // Exponential backoff with jitter for retry after error
+              const jitter = Math.floor(Math.random() * 10000); // Add up to 10s of jitter
+              const nextDelay = Math.min(delayMs * 1.5 + jitter, 120000); // Cap at 2 minutes
+              console.log(`🔄 Will retry group initialization in ${Math.round(nextDelay/1000)} seconds...`);
+              attemptGroupInit(nextDelay, attempt + 1);
+            } else {
+              console.log('⚠️ Failed to initialize groups after maximum attempts. Will continue without all groups.');
+            }
           }
-        }, 30000); // Try again after 30 seconds
-      }
-    } catch (error) {
-      console.error('❌ Initial group loading failed:', error.message);
-      console.log('🔄 Groups will be retried automatically...');
+        }, delayMs);
+      };
       
-      // Retry after error with longer delay
-      setTimeout(async () => {
-        try {
-          await this.initializeGroups(1, 5);
-        } catch (retryError) {
-          console.error('❌ Retry group loading failed:', retryError.message);
+      // Progressive retry strategy with multiple attempts at increasing intervals
+      // First attempt after 15 seconds
+      attemptGroupInit(15000, 1);
+      
+      // Second attempt after 30 seconds regardless of first attempt result
+      setTimeout(() => {
+        if (this.isClientReady) {
+          console.log('🔄 Scheduling second group initialization attempt...');
+          attemptGroupInit(1000, 2); // Almost immediate execution for second attempt
         }
-      }, 45000); // Try again after 45 seconds if first attempt errored
-    }
-  }, 15000); // First attempt after 15 seconds
-});
+      }, 30000);
+      
+      // Third attempt after 60 seconds regardless of previous attempts
+      setTimeout(() => {
+        if (this.isClientReady) {
+          console.log('🔄 Scheduling third group initialization attempt...');
+          attemptGroupInit(1000, 3); // Almost immediate execution for third attempt
+        }
+      }, 60000);
+    });
 
     // Authentication failure - handle gracefully
     this.client.on('auth_failure', (msg) => {
       console.error('🚨 Authentication failed:', msg);
       this.isAuthenticated = false;
       this.isClientReady = false;
-      
+
       // Don't clear session immediately - might be temporary
       console.log('⏳ Will retry authentication...');
       setTimeout(() => this.handleAuthFailure(), 5000);
@@ -412,11 +620,11 @@ this.client.on('ready', async () => {
     this.client.on('disconnected', (reason) => {
       console.log(`🔌 Disconnected: ${reason}`);
       this.isClientReady = false;
-      
+
       // Check if this is a logout (session invalidation)
-      const isLogout = reason === 'UNPAIRED' || reason === 'UNPAIRED_DEVICE' || 
-                      reason === 'LOGOUT' || reason.includes('LOGOUT');
-      
+      const isLogout = reason === 'UNPAIRED' || reason === 'UNPAIRED_DEVICE' ||
+        reason === 'LOGOUT' || reason.includes('LOGOUT');
+
       if (isLogout) {
         console.log('👋 Logout detected - user manually logged out');
         this.isAuthenticated = false;
@@ -424,7 +632,7 @@ this.client.on('ready', async () => {
       } else {
         console.log('🔄 Connection lost - will attempt to reconnect...');
       }
-      
+
       this.handleDisconnection(reason);
     });
 
@@ -461,36 +669,59 @@ this.client.on('ready', async () => {
   /**
    * Clean up old backups using LIFO (Stack) approach
    * Keeps only the latest 2 backups, removes older ones
+   * Enhanced with collection existence checks
    */
   async cleanupOldBackups() {
     try {
       if (!this.useRemoteAuth) return; // Only for RemoteAuth
-      
+      if (mongoose.connection.readyState !== 1) {
+        console.log('⚠️ MongoDB not connected, skipping backup cleanup');
+        return;
+      }
+
       const db = mongoose.connection.db;
-      const filesCollection = db.collection('whatsapp-RemoteAuth-persistent-whatsapp-client.files');
-      const chunksCollection = db.collection('whatsapp-RemoteAuth-persistent-whatsapp-client.chunks');
       
+      // Check if collections exist before attempting cleanup
+      const collections = await db.listCollections().toArray();
+      const collectionNames = collections.map(c => c.name);
+      
+      const filesCollectionName = 'whatsapp-RemoteAuth-persistent-whatsapp-client.files';
+      const chunksCollectionName = 'whatsapp-RemoteAuth-persistent-whatsapp-client.chunks';
+      
+      if (!collectionNames.includes(filesCollectionName) || !collectionNames.includes(chunksCollectionName)) {
+        console.log('⚠️ RemoteAuth collections not found, skipping backup cleanup');
+        return;
+      }
+      
+      const filesCollection = db.collection(filesCollectionName);
+      const chunksCollection = db.collection(chunksCollectionName);
+
       // Get all backup files sorted by upload date (newest first - Stack LIFO)
       const backupFiles = await filesCollection
         .find({})
         .sort({ uploadDate: -1 }) // Newest first
         .toArray();
+
+      console.log(`📊 Found ${backupFiles.length} backup files in RemoteAuth storage`);
       
       // Keep only latest 2 backups (top 2 of stack)
       if (backupFiles.length > 2) {
         const filesToDelete = backupFiles.slice(2); // Remove everything after top 2
-        
+
         for (const file of filesToDelete) {
           // Delete file metadata
           await filesCollection.deleteOne({ _id: file._id });
           // Delete corresponding chunks
           await chunksCollection.deleteMany({ files_id: file._id });
         }
-        
+
         console.log(`🧹 Stack cleanup: Removed ${filesToDelete.length} old backups, kept latest 2`);
+      } else {
+        console.log('✅ No backup cleanup needed, fewer than 3 backups exist');
       }
     } catch (error) {
       console.error('❌ Backup cleanup failed:', error.message);
+      // Non-critical error, just log and continue
     }
   }
 
@@ -499,19 +730,19 @@ this.client.on('ready', async () => {
    */
   startConnectionMonitoring() {
     this.stopConnectionMonitoring(); // Clear any existing monitor
-    
+
     console.log('🔍 Starting connection monitoring...');
-    
+
     // Increase heartbeat interval for more stability (less frequent checks)
     this.heartbeatInterval = Math.max(this.heartbeatInterval, 60000); // Minimum 60 seconds
-    
-    console.log(`⏱️ Connection check interval set to ${this.heartbeatInterval/1000}s`);
-    
+
+    console.log(`⏱️ Connection check interval set to ${this.heartbeatInterval / 1000}s`);
+
     this.connectionMonitor = setInterval(async () => {
       // Add random jitter to prevent synchronized failures
       const jitter = Math.floor(Math.random() * 5000); // 0-5 seconds jitter
       await new Promise(resolve => setTimeout(resolve, jitter));
-      
+
       try {
         await this.performConnectionCheck();
       } catch (error) {
@@ -519,18 +750,18 @@ this.client.on('ready', async () => {
         // Don't crash the monitoring loop on errors
       }
     }, this.heartbeatInterval);
-    
+
     // Set up backup cleanup interval - run every 10 minutes
     setInterval(async () => {
       await this.cleanupOldBackups();
     }, 10 * 60 * 1000); // Clean every 10 minutes
-    
+
     // Add periodic group initialization for backend-only mode
     // This ensures groups are eventually loaded even if initial attempts fail
     if (this.groupRefreshInterval) {
       clearInterval(this.groupRefreshInterval);
     }
-    
+
     // Check for groups every 5 minutes if none were found initially
     this.groupRefreshInterval = setInterval(async () => {
       try {
@@ -538,7 +769,7 @@ this.client.on('ready', async () => {
         if (this.isClientReady) {
           const groups = await this.client.getChats();
           const groupCount = groups.filter(chat => chat.isGroup).length;
-          
+
           if (groupCount === 0) {
             console.log('🔄 No groups found, attempting to initialize groups again...');
             await this.initializeGroups(1, 3); // Use fewer attempts for periodic checks
@@ -550,7 +781,7 @@ this.client.on('ready', async () => {
         console.error('❌ Periodic group refresh failed:', error.message);
       }
     }, 5 * 60 * 1000); // Every 5 minutes
-    
+
     console.log('🔄 Periodic group refresh scheduled (every 5 minutes)');
   }
 
@@ -563,13 +794,13 @@ this.client.on('ready', async () => {
       this.connectionMonitor = null;
       console.log('🛑 Connection monitoring stopped');
     }
-    
+
     if (this.groupRefreshInterval) {
       clearInterval(this.groupRefreshInterval);
       this.groupRefreshInterval = null;
       console.log('🛑 Group refresh stopped');
     }
-    
+
     // Don't clear lock refresh interval here - it should persist until process exit
     // to prevent other instances from taking over while we're reconnecting
   }
@@ -589,7 +820,7 @@ this.client.on('ready', async () => {
       const timeSinceLastHeartbeat = Date.now() - this.lastHeartbeat.getTime();
       const adjustedMaxIdleTime = this.maxIdleTime * 1.5; // 50% more tolerance for large-scale operations
       if (timeSinceLastHeartbeat > adjustedMaxIdleTime) {
-        console.log(`💤 Connection appears idle for ${Math.round(timeSinceLastHeartbeat/1000)}s (adjusted threshold: ${Math.round(adjustedMaxIdleTime/1000)}s)`);
+        console.log(`💤 Connection appears idle for ${Math.round(timeSinceLastHeartbeat / 1000)}s (adjusted threshold: ${Math.round(adjustedMaxIdleTime / 1000)}s)`);
         await this.performActiveHealthCheck();
         return;
       }
@@ -603,7 +834,7 @@ this.client.on('ready', async () => {
           const heapTotalMB = Math.round(memoryUsage.heapTotal / 1024 / 1024);
           const heapPercentage = Math.round((heapUsedMB / heapTotalMB) * 100);
           console.log(`📊 Memory usage: ${heapUsedMB}MB / ${heapTotalMB}MB (${heapPercentage}%)`);
-          
+
           // If memory usage is too high, suggest garbage collection
           if (heapPercentage > 85) {
             console.log('⚠️ High memory usage detected, suggesting garbage collection');
@@ -622,21 +853,21 @@ this.client.on('ready', async () => {
       // Passive check - just verify state with timeout
       const state = await Promise.race([
         this.client.getState(),
-        new Promise((_, reject) => 
+        new Promise((_, reject) =>
           setTimeout(() => reject(new Error('Connection check timeout')), 15000) // 15 second timeout
         )
       ]);
-      
+
       if (state === 'CONNECTED') {
         // Update heartbeat on successful check
         this.lastHeartbeat = new Date();
-        
+
         // Reset stale connection counter on successful connection
         if (this.staleConnectionCount && this.staleConnectionCount > 0) {
           console.log('✅ Connection restored, resetting stale connection counter');
           this.staleConnectionCount = 0;
         }
-        
+
         // For large-scale operation, check if we have all expected groups
         if (this.isAuthenticated) {
           try {
@@ -691,10 +922,10 @@ this.client.on('ready', async () => {
   async performActiveHealthCheck() {
     try {
       console.log('🏥 Performing active health check...');
-      
+
       // Try multiple health check methods
       let healthCheckPassed = false;
-      
+
       // Method 1: Try to get state with increased timeout
       try {
         await Promise.race([
@@ -705,7 +936,7 @@ this.client.on('ready', async () => {
         console.log('✅ Active health check passed (state check)');
       } catch (stateError) {
         console.log('⚠️ State check failed:', stateError.message);
-        
+
         // Method 2: Try to get connection state through info
         try {
           await Promise.race([
@@ -718,7 +949,7 @@ this.client.on('ready', async () => {
           console.log('⚠️ Battery check failed:', batteryError.message);
         }
       }
-      
+
       if (healthCheckPassed) {
         this.lastHeartbeat = new Date();
         // If we had pending reconnection attempts, reduce the counter
@@ -743,7 +974,7 @@ this.client.on('ready', async () => {
    */
   async handleConnectionStale() {
     this.isClientReady = false;
-    
+
     // Check if we've had too many stale connections in a short period
     const now = new Date();
     if (!this.lastStaleConnectionTime) {
@@ -760,16 +991,16 @@ this.client.on('ready', async () => {
       }
       this.lastStaleConnectionTime = now;
     }
-    
+
     // Don't clear session - just reconnect, but with increasing delay
     console.log(`🔄 Reconnecting due to stale connection (${this.staleConnectionCount} in recent period)...`);
-    
+
     // Adaptive delay based on recent stale connection frequency
     const baseDelay = 10000; // 10 seconds base delay (increased from 5s)
     const delay = Math.min(baseDelay * Math.pow(1.5, this.staleConnectionCount - 1), 60000); // Max 1 minute
-    
-    console.log(`⏱️ Waiting ${delay/1000}s before reconnection attempt`);
-    
+
+    console.log(`⏱️ Waiting ${delay / 1000}s before reconnection attempt`);
+
     setTimeout(async () => {
       try {
         // Only force new session if we've had many stale connections
@@ -790,10 +1021,10 @@ this.client.on('ready', async () => {
    */
   handleDisconnection(reason = 'UNKNOWN') {
     this.stopConnectionMonitoring();
-    
+
     // Log the disconnection reason for better debugging
     console.log(`📊 Disconnection occurred with reason: ${reason}`);
-    
+
     // For large-scale operation, we need to be more patient with reconnections
     if (this.reconnectAttempts >= this.maxReconnectAttempts) {
       console.error('🛑 Maximum reconnection attempts reached');
@@ -812,32 +1043,32 @@ this.client.on('ready', async () => {
     // Increase base delay and use gentler exponential backoff for large-scale operation
     const baseDelay = 20000; // Increased to 20 seconds for more stability
     const delay = Math.min(baseDelay * Math.pow(1.2, this.reconnectAttempts - 1), 180000); // Max 3 minutes
-    
-    console.log(`🔄 Reconnection attempt ${this.reconnectAttempts}/${this.maxReconnectAttempts} in ${delay/1000}s`);
-    
+
+    console.log(`🔄 Reconnection attempt ${this.reconnectAttempts}/${this.maxReconnectAttempts} in ${delay / 1000}s`);
+
     // Check if session files still exist before reconnecting
     const hasSessionFiles = this.checkExistingAuth();
-    
+
     setTimeout(async () => {
       try {
         // Be more conservative with forcing new sessions for large-scale operation
         // Only force new session for explicit logout/unpair or after multiple failures
-        const forceNewSession = 
+        const forceNewSession =
           // Only force for explicit logout reasons
-          (reason === 'LOGOUT' || reason === 'UNPAIRED' || reason === 'UNPAIRED_DEVICE') || 
+          (reason === 'LOGOUT' || reason === 'UNPAIRED' || reason === 'UNPAIRED_DEVICE') ||
           // Or if session files are missing
-          (!hasSessionFiles) || 
+          (!hasSessionFiles) ||
           // Or after many failed attempts (increased threshold for large-scale operation)
           (this.reconnectAttempts > 5); // Only clear session after 5 failed attempts
-        
+
         if (forceNewSession) {
-          console.log(`⚠️ Forcing new session due to: ${reason === 'LOGOUT' || reason === 'UNPAIRED' || reason === 'UNPAIRED_DEVICE' ? 
-            'explicit logout/unpair' : 
+          console.log(`⚠️ Forcing new session due to: ${reason === 'LOGOUT' || reason === 'UNPAIRED' || reason === 'UNPAIRED_DEVICE' ?
+            'explicit logout/unpair' :
             (!hasSessionFiles ? 'missing session files' : 'multiple reconnection failures')}`);
         } else {
           console.log('🔐 Attempting to reuse existing session for better persistence');
         }
-        
+
         // For large-scale operation, ensure proper permissions before reconnecting
         await this.ensureProperPermissions();
         await this.initializeClient(forceNewSession);
@@ -847,7 +1078,7 @@ this.client.on('ready', async () => {
         if (error.stack) {
           console.log('📊 Error stack:', error.stack.split('\n').slice(0, 3).join('\n'));
         }
-        
+
         // For large-scale operation, we need to be more resilient
         // If this was a critical error, wait longer before next attempt
         if (error.message && (
@@ -872,7 +1103,7 @@ this.client.on('ready', async () => {
    */
   async handleAuthFailure() {
     console.log('🔐 Handling authentication failure...');
-    
+
     // Wait a bit then retry
     setTimeout(async () => {
       try {
@@ -891,49 +1122,107 @@ this.client.on('ready', async () => {
   /**
    * Handle initialization failure with improved error classification and recovery
    */
-  async handleInitializationFailure(error) {
+  // async handleInitializationFailure(error) {
+  //   this.reconnectAttempts++;
+
+  //   // Log detailed error information for better debugging
+  //   console.log('📊 Error type:', error.constructor.name);
+  //   console.log('📊 Error message:', error.message);
+  //   if (error.stack) {
+  //     console.log('📊 Error stack (first 3 lines):', error.stack.split('\n').slice(0, 3).join('\n'));
+  //   }
+
+  //   // Categorize errors for better handling
+  //   const errorMessage = error.message.toLowerCase();
+  //   let additionalDelay = 0;
+
+  //   // Browser/Protocol errors
+  //   if (errorMessage.includes('protocol error') ||
+  //     errorMessage.includes('session closed') ||
+  //     errorMessage.includes('browser has disconnected') ||
+  //     errorMessage.includes('target closed') ||
+  //     errorMessage.includes('connection reset')) {
+  //     console.log('🔄 Browser connection issue detected, adding recovery time...');
+  //     additionalDelay = 5000; // Add 5 seconds for browser issues
+  //   }
+  //   // Browser installation/launch errors
+  //   else if (errorMessage.includes('enoent') ||
+  //     errorMessage.includes('failed to launch') ||
+  //     errorMessage.includes('executable path')) {
+  //     console.error('🚨 Critical browser error:', error.message);
+  //     console.log('💡 Suggestion: Please check Chrome/Chromium installation');
+  //     additionalDelay = 10000; // Add 10 seconds for installation issues
+  //   }
+
+  //   if (this.reconnectAttempts < this.maxReconnectAttempts) {
+  //     // Increase base delay and use exponential backoff with a higher factor
+  //     const baseDelay = 15000 + additionalDelay;
+  //     const delay = Math.min(baseDelay * Math.pow(1.5, this.reconnectAttempts - 1), 180000);
+  //     console.log(`🔄 Retry initialization in ${delay / 1000}s (attempt ${this.reconnectAttempts}/${this.maxReconnectAttempts})`);
+
+  //     setTimeout(async () => {
+  //       // Clear session earlier to avoid wasting time with invalid sessions
+  //       const shouldClearSession = this.reconnectAttempts > 3 ||
+  //         errorMessage.includes('auth') ||
+  //         errorMessage.includes('session');
+  //       await this.initializeClient(shouldClearSession);
+  //     }, delay);
+  //   } else {
+  //     console.error('🛑 Initialization failed after maximum attempts');
+  //     console.log('💡 Manual intervention required - please restart the application');
+  //   }
+  // }
+    async handleInitializationFailure(error) {
     this.reconnectAttempts++;
-    
+
     // Log detailed error information for better debugging
     console.log('📊 Error type:', error.constructor.name);
     console.log('📊 Error message:', error.message);
     if (error.stack) {
       console.log('📊 Error stack (first 3 lines):', error.stack.split('\n').slice(0, 3).join('\n'));
     }
-    
+
     // Categorize errors for better handling
     const errorMessage = error.message.toLowerCase();
     let additionalDelay = 0;
-    
+    let shouldClearSession = false;
+
+    // Specific handling for browser disconnection error
+    if (errorMessage.includes('navigation failed because browser has disconnected')) {
+      console.log('🔄 Browser disconnection detected, adding extended recovery time...');
+      additionalDelay = 15000; // Add 15 seconds for browser disconnection
+      shouldClearSession = true; // Clear session for this specific error
+    }
     // Browser/Protocol errors
-    if (errorMessage.includes('protocol error') || 
-        errorMessage.includes('session closed') || 
-        errorMessage.includes('browser has disconnected') ||
-        errorMessage.includes('target closed') ||
-        errorMessage.includes('connection reset')) {
+    else if (errorMessage.includes('protocol error') ||
+      errorMessage.includes('session closed') ||
+      errorMessage.includes('browser has disconnected') ||
+      errorMessage.includes('target closed') ||
+      errorMessage.includes('connection reset')) {
       console.log('🔄 Browser connection issue detected, adding recovery time...');
-      additionalDelay = 5000; // Add 5 seconds for browser issues
+      additionalDelay = 8000; // Increased from 5000 to 8000 ms for browser issues
     }
     // Browser installation/launch errors
-    else if (errorMessage.includes('enoent') || 
-             errorMessage.includes('failed to launch') ||
-             errorMessage.includes('executable path')) {
+    else if (errorMessage.includes('enoent') ||
+      errorMessage.includes('failed to launch') ||
+      errorMessage.includes('executable path')) {
       console.error('🚨 Critical browser error:', error.message);
       console.log('💡 Suggestion: Please check Chrome/Chromium installation');
       additionalDelay = 10000; // Add 10 seconds for installation issues
     }
-    
+
     if (this.reconnectAttempts < this.maxReconnectAttempts) {
       // Increase base delay and use exponential backoff with a higher factor
       const baseDelay = 15000 + additionalDelay;
       const delay = Math.min(baseDelay * Math.pow(1.5, this.reconnectAttempts - 1), 180000);
-      console.log(`🔄 Retry initialization in ${delay/1000}s (attempt ${this.reconnectAttempts}/${this.maxReconnectAttempts})`);
-      
+      console.log(`🔄 Retry initialization in ${delay / 1000}s (attempt ${this.reconnectAttempts}/${this.maxReconnectAttempts})`);
+
       setTimeout(async () => {
         // Clear session earlier to avoid wasting time with invalid sessions
-        const shouldClearSession = this.reconnectAttempts > 3 || 
-                                  errorMessage.includes('auth') || 
-                                  errorMessage.includes('session');
+        shouldClearSession = shouldClearSession || 
+          this.reconnectAttempts > 3 ||
+          errorMessage.includes('auth') ||
+          errorMessage.includes('session');
         await this.initializeClient(shouldClearSession);
       }, delay);
     } else {
@@ -949,16 +1238,16 @@ this.client.on('ready', async () => {
     try {
       // Create session directory if it doesn't exist
       if (!fs.existsSync(this.sessionPath)) {
-        fs.mkdirSync(this.sessionPath, { 
-          recursive: true, 
+        fs.mkdirSync(this.sessionPath, {
+          recursive: true,
           mode: 0o755 // rwxr-xr-x
         });
       }
-      
+
       // Set ownership and permissions
       const userId = process.getuid ? process.getuid() : null;
       const groupId = process.getgid ? process.getgid() : null;
-      
+
       if (userId !== null && groupId !== null) {
         // Change ownership to current user
         const chownRecursive = (dirPath) => {
@@ -978,15 +1267,15 @@ this.client.on('ready', async () => {
             console.warn(`⚠️ Could not set ownership for ${dirPath}: ${err.message}`);
           }
         };
-        
+
         chownRecursive(this.sessionPath);
         console.log('✅ Session directory permissions set correctly');
       }
-      
+
       // Set directory permissions
       fs.chmodSync(this.sessionPath, 0o755);
       console.log('✅ Session directory created with proper permissions');
-      
+
     } catch (error) {
       console.warn('⚠️ Could not set permissions:', error.message);
       console.log('💡 Make sure the script runs with proper user permissions');
@@ -1015,15 +1304,15 @@ this.client.on('ready', async () => {
     try {
       // Skip business messages
       if (this.isBusinessMessage(message)) return;
-      
+
       // Skip non-group messages
       if (!message.from.includes('@g.us')) return;
-      
+
       // Get message details for enhanced logging
       const messageContent = message.body || '[NO CONTENT]';
       const messageType = message.type || 'unknown';
       const timestamp = new Date(message.timestamp * 1000).toISOString();
-      
+
       // Get group information
       let groupName = 'unavailable';
       try {
@@ -1033,7 +1322,7 @@ this.client.on('ready', async () => {
         const util = require('util');
         console.error('Error getting chat info:', util.inspect({ error: err.message }, { colors: true, depth: null }));
       }
-      
+
       // Get sender information
       let senderInfo = 'unknown';
       try {
@@ -1049,7 +1338,7 @@ this.client.on('ready', async () => {
         const util = require('util');
         console.error('Error getting contact info:', util.inspect({ error: err.message }, { colors: true, depth: null }));
       }
-      
+
       // Enhanced logging with JSON format and color
       const messageDetails = {
         content: messageContent,
@@ -1058,7 +1347,7 @@ this.client.on('ready', async () => {
         time: timestamp,
         type: messageType
       };
-      
+
       console.log('📩 MESSAGE DETAILS 📩');
       console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
       // Use util.inspect with colors enabled for pretty-printed colored output
@@ -1066,10 +1355,10 @@ this.client.on('ready', async () => {
       console.log(util.inspect(messageDetails, { colors: true, depth: null }));
       console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
 
-      
+
       // Process message
       const processedMessage = await this.messageProcessor.processMessage(message);
-      
+
       if (processedMessage) {
         // Save to database
         const insertId = await this.dbService.saveMessage(
@@ -1091,11 +1380,11 @@ this.client.on('ready', async () => {
           processedMessage.replyAttachmentPath,
           processedMessage.attachmentType
         );
-        
+
         // Log saved message with color
         const util = require('util');
         console.log(`✅ Message saved:`, util.inspect({ id: insertId }, { colors: true, depth: null }));
-        
+
         // Broadcast if server available
         if (this.server && typeof this.server.broadcastNewMessage === 'function') {
           this.server.broadcastNewMessage({
@@ -1117,18 +1406,412 @@ this.client.on('ready', async () => {
   async initializeGroups(attempt = 1, maxAttempts = 10) {
     try {
       console.log(`📋 Initializing groups for large-scale operation (attempt ${attempt})...`);
-      
+
       if (!this.isClientReady) {
         throw new Error('Client not ready');
       }
-      
+
       // Wait for full readiness with more detailed logging
       let waitTime = 0;
       const maxWaitTime = 90000; // Increased from 60s to 90s for large-scale operations
+
+      while ((!this.client.info || !this.businessPhoneNumber) && waitTime < maxWaitTime) {
+        if (waitTime % 10000 === 0) { // Log every 10 seconds
+          console.log(`⏳ Waiting for client info... (${waitTime / 1000}s / ${maxWaitTime / 1000}s)`);
+        }
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        waitTime += 1000;
+      }
+
+      if (!this.client.info || !this.businessPhoneNumber) {
+        console.warn('⚠️ Timed out waiting for client info, attempting to get groups anyway');
+      }
+
+      // Force a sync before getting chats
+      try {
+        await this.client.getState();
+      } catch (stateError) {
+        console.warn('⚠️ Could not get client state:', stateError.message);
+      }
+
+      // Use Promise.race with timeout for large-scale operations
+      const chats = await Promise.race([
+        this.client.getChats(),
+        new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout getting chats')), 60000))
+      ]);
+      const groups = chats.filter(chat => chat.isGroup);
+
+      console.log(`✅ Found ${groups.length} groups`);
+
+      // For large-scale operations, only log a summary instead of all groups
+      if (groups.length > 20) {
+        console.log(`   First 10 groups:`);
+        groups.slice(0, 10).forEach((group, index) => {
+          console.log(`   ${index + 1}. ${group.name}`);
+        });
+        console.log(`   ... and ${groups.length - 10} more groups`);
+      } else {
+        groups.forEach((group, index) => {
+          console.log(`   ${index + 1}. ${group.name}`);
+        });
+      }
+
+      // For large-scale operations, check if we have all expected groups
+      if (groups.length > 0 && groups.length < 400) {
+        console.log(`⚠️ Only ${groups.length} groups found (expecting ~400), will continue loading...`);
+
+        // Schedule a refresh if we don't have all groups yet
+        if (!this.partialGroupRefreshScheduled) {
+          this.partialGroupRefreshScheduled = true;
+          setTimeout(() => {
+            console.log('🔄 Performing scheduled group refresh to find missing groups');
+            this.initializeGroups();
+            this.partialGroupRefreshScheduled = false;
+          }, 60000); // Wait 1 minute before refreshing to avoid rate limits
+        }
+      } else if (groups.length >= 400) {
+        console.log('🎉 All expected groups loaded successfully!');
+      }
+
+      return groups;
+    } catch (error) {
+      console.error(`❌ Group initialization failed (attempt ${attempt}/${maxAttempts}):`, error.message);
+
+      // Log more detailed error information for debugging
+      if (error.stack) {
+        console.debug('Error stack:', error.stack.split('\n')[0]);
+      }
+
+      // Check client state
+      try {
+        const state = await this.client.getState();
+        console.log(`📱 Current client state: ${state}`);
+      } catch (stateError) {
+        console.warn('⚠️ Could not get client state:', stateError.message);
+      }
+
+      if (attempt < maxAttempts) {
+        // Exponential backoff with jitter for more reliable retry
+        const baseDelay = 5000;
+        const maxDelay = 60000; // Increased from 45s to 60s for large-scale operations
+        const expBackoff = baseDelay * Math.pow(1.5, attempt - 1);
+        const jitter = Math.random() * 2000 - 1000; // ±1s jitter
+        const delay = Math.min(expBackoff + jitter, maxDelay);
+
+        console.log(`🔄 Retry in ${Math.round(delay / 1000)}s... (attempt ${attempt + 1}/${maxAttempts})`);
+        await new Promise(resolve => setTimeout(resolve, delay));
+        return this.initializeGroups(attempt + 1, maxAttempts);
+      }
+
+      console.log('⚠️ Group initialization failed after all attempts');
+      console.log('📝 The application will continue running and retry group initialization periodically');
+
+      // For large-scale operations, ensure we have a periodic retry mechanism
+      if (!this.groupRefreshInterval) {
+        console.log('🔄 Setting up periodic group refresh every 5 minutes');
+        this.groupRefreshInterval = setInterval(() => {
+          console.log('🔄 Attempting periodic group initialization...');
+          this.initializeGroups(1, 5); // Use fewer attempts for periodic checks
+        }, 5 * 60 * 1000); // Every 5 minutes
+      }
+
+      return [];
+    }
+  }
+
+  // Utility methods
+  isBusinessMessage(message) {
+    if (!message.from || !this.businessPhoneNumber) return false;
+    const isFromBusiness = message.author && message.author.includes(this.businessPhoneNumber);
+    const isStatus = message.isStatus === true || message.from.includes('status@broadcast');
+    return isFromBusiness || isStatus;
+  }
+
+  /**
+   * Get connection status
+   */
+  getStatus() {
+    return {
+      isReady: this.isClientReady,
+      isAuthenticated: this.isAuthenticated,
+      reconnectAttempts: this.reconnectAttempts,
+      lastHeartbeat: this.lastHeartbeat,
+      businessNumber: this.businessPhoneNumber
+    };
+  }
+
+  /**
+   * Force group initialization - useful for backend-only mode
+   * @returns {Promise<Array>} - List of groups
+   */
+  async forceGroupInitialization() {
+    console.log('🔄 Manually triggering group initialization...');
+
+    if (!this.isClientReady) {
+      console.warn('⚠️ Client not ready, cannot initialize groups');
+      return [];
+    }
+
+    try {
+      // Force a sync before getting chats
+      try {
+        await this.client.getState();
+        console.log('✅ Client state synchronized');
+      } catch (stateError) {
+        console.warn('⚠️ Could not get client state:', stateError.message);
+      }
+
+      // Wait a moment for sync to complete
+      await new Promise(resolve => setTimeout(resolve, 3000));
+
+      // Get groups
+      return await this.initializeGroups(1, 5);
+    } catch (error) {
+      console.error('❌ Manual group initialization failed:', error.message);
+      return [];
+    }
+  }
+
+  /**
+   * Manual logout detection and handling
+   */
+  async handleManualLogout() {
+    console.log('👋 Manual logout detected');
+    this.isAuthenticated = false;
+    this.isClientReady = false;
+    await this.clearSession();
+
+    // Wait a moment then reinitialize for fresh login
+    setTimeout(() => {
+      console.log('🔄 Ready for fresh authentication');
+      this.initializeClient(true);
+    }, 2000);
+  }
+
+  /**
+   * Graceful shutdown for backend-only implementation
+   */
+  async shutdown() {
+    console.log('🛑 Shutting down Persistent WhatsApp Client...');
+    this.stopConnectionMonitoring();
+
+    if (this.client) {
+      try {
+        // Force destroy the client with a timeout to prevent hanging
+        const destroyPromise = this.client.destroy();
+        const timeoutPromise = new Promise((_, reject) =>
+          setTimeout(() => reject(new Error('Client destroy timeout')), 10000)
+        );
+
+        await Promise.race([destroyPromise, timeoutPromise])
+          .catch(error => {
+            console.warn('⚠️ Client destroy timed out or failed:', error.message);
+            console.log('Continuing shutdown process...');
+          });
+
+        console.log('✅ Client shutdown complete');
+      } catch (error) {
+        console.error('❌ Error during shutdown:', error);
+        console.log('Continuing shutdown process despite error...');
+      }
+    }
+  }
+  /**
+   * Get authentication status and QR code for web interface
+   * @returns {Object} Authentication status object
+   */
+  getAuthStatus() {
+    // Authentication is successful if isAuthenticated is true, regardless of clientReady
+    // clientReady comes later in the process
+    const status = {
+      authenticated: this.isAuthenticated, // Changed: don't wait for clientReady
+      clientReady: this.isClientReady,
+      businessPhoneNumber: this.businessPhoneNumber,
+      lastHeartbeat: this.lastHeartbeat,
+      reconnectAttempts: this.reconnectAttempts
+    };
+
+    console.log(`🔍 Auth Status Check: authenticated=${this.isAuthenticated}, clientReady=${this.isClientReady}, returning=${status.authenticated}`);
+
+    // Include QR code if not authenticated and QR is available
+    if (!status.authenticated && this.qrCodeBase64) {
+      // Remove data URL prefix to get just the base64 data
+      const base64Data = this.qrCodeBase64.replace(/^data:image\/png;base64,/, '');
+      status.qrCode = base64Data;
+      status.qrCodeTime = this.lastQRCodeTime;
+      status.message = 'Scan QR code to authenticate';
+      console.log('🔍 Returning QR code for authentication');
+    } else if (!status.authenticated) {
+      status.message = 'Waiting for QR code...';
+      console.log('🔍 Waiting for QR code generation');
+    } else {
+      status.message = this.isClientReady ? 'WhatsApp is connected and ready' : 'WhatsApp authenticated, initializing...';
+      console.log('🔍 WhatsApp is authenticated!');
+    }
+
+    return status;
+  }
+
+  /**
+   * Refresh QR code by reinitializing client
+   * @returns {Promise<boolean>} Success status
+   */
+  async refreshQRCode() {
+    try {
+      console.log('🔄 Refreshing QR code...');
+
+      // Clear current QR code
+      this.currentQRCode = null;
+      this.qrCodeBase64 = null;
+      this.lastQRCodeTime = null;
+
+      // Only refresh if not authenticated
+      if (!this.isAuthenticated) {
+        // Reinitialize client to get new QR code
+        await this.initializeClient(false);
+        return true;
+      } else {
+        console.log('⚠️ Cannot refresh QR code - already authenticated');
+        return false;
+      }
+    } catch (error) {
+      console.error('❌ Error refreshing QR code:', error);
+      return false;
+    }
+  }
+
+  /**
+   * Clear QR code data
+   */
+  clearQRCode() {
+    this.currentQRCode = null;
+    this.qrCodeBase64 = null;
+    this.lastQRCodeTime = null;
+    console.log('🧹 QR code data cleared');
+  }
+
+  /**
+   * Handle disconnection with improved reconnection strategy
+   */
+  handleDisconnection(reason = 'UNKNOWN') {
+    console.log(`🔌 Handling disconnection: ${reason}`);
+    this.isClientReady = false;
+
+    // For logout/unpair, clear authentication
+    if (reason === 'LOGOUT' || reason === 'UNPAIRED' || reason === 'UNPAIRED_DEVICE') {
+      this.isAuthenticated = false;
+      this.clearSession();
+    }
+
+    // Simple reconnection logic
+    setTimeout(async () => {
+      try {
+        await this.initializeClient(false);
+      } catch (error) {
+        console.error('❌ Reconnection failed:', error);
+      }
+    }, 5000);
+  }
+
+  /**
+   * Handle authentication failure
+   */
+  async handleAuthFailure() {
+    console.log('🔐 Handling authentication failure...');
+    this.isAuthenticated = false;
+
+    setTimeout(async () => {
+      try {
+        await this.initializeClient(true); // Force new session on auth failure
+      } catch (error) {
+        console.error('❌ Auth retry failed:', error);
+      }
+    }, 10000);
+  }
+
+  /**
+   * Handle initialization failure
+   */
+  async handleInitializationFailure(error) {
+    console.error('❌ Initialization failed:', error.message);
+
+    setTimeout(async () => {
+      try {
+        await this.initializeClient(true);
+      } catch (retryError) {
+        console.error('❌ Retry failed:', retryError);
+      }
+    }, 15000);
+  }
+
+  /**
+   * Ensure proper file permissions
+   */
+  async ensureProperPermissions() {
+    try {
+      if (!fs.existsSync(this.sessionPath)) {
+        fs.mkdirSync(this.sessionPath, { recursive: true, mode: 0o755 });
+      }
+      console.log('✅ Session directory permissions ensured');
+    } catch (error) {
+      console.warn('⚠️ Could not set permissions:', error.message);
+    }
+  }
+
+  /**
+   * Clear session data
+   */
+  async clearSession() {
+    try {
+      if (fs.existsSync(this.sessionPath)) {
+        console.log('🧹 Clearing session data...');
+        fs.rmSync(this.sessionPath, { recursive: true, force: true });
+        console.log('✅ Session cleared');
+      }
+    } catch (error) {
+      console.error('❌ Error clearing session:', error);
+    }
+  }
+
+  /**
+   * Initialize groups method with enhanced readiness checks
+   */
+  async initializeGroups(attempt = 1, maxAttempts = 5) {
+    try {
+      console.log(`📋 Initializing groups (attempt ${attempt})...`);
+
+      // Enhanced client readiness check with more detailed logging
+      if (!this.isClientReady) {
+        console.log('⚠️ Client not ready yet, waiting for ready state');
+        throw new Error('Client not ready');
+      }
+      
+      // Additional check for Puppeteer browser and page
+      if (!this.client.pupBrowser || !this.client.pupPage) {
+        console.log('⚠️ Puppeteer browser or page not initialized');
+        throw new Error('Puppeteer browser or page not initialized');
+      }
+      
+      // Check if the page is still valid
+      try {
+        console.log('🔍 Verifying WhatsApp web page responsiveness...');
+        // A simple operation to verify the page is responsive
+        await this.client.pupPage.evaluate(() => true).catch(() => {
+          throw new Error('Puppeteer page is not responsive');
+        });
+        console.log('✅ WhatsApp web page is responsive');
+      } catch (pageError) {
+        console.error('❌ Page validation failed:', pageError.message);
+        throw new Error('WhatsApp web page is not fully initialized');
+      }
+
+      // Wait for full readiness with more detailed logging
+      let waitTime = 0;
+      const maxWaitTime = 90000; // 90 seconds max wait time
       
       while ((!this.client.info || !this.businessPhoneNumber) && waitTime < maxWaitTime) {
         if (waitTime % 10000 === 0) { // Log every 10 seconds
-          console.log(`⏳ Waiting for client info... (${waitTime/1000}s / ${maxWaitTime/1000}s)`);
+          console.log(`⏳ Waiting for client info... (${waitTime / 1000}s / ${maxWaitTime / 1000}s)`);
         }
         await new Promise(resolve => setTimeout(resolve, 1000));
         waitTime += 1000;
@@ -1137,7 +1820,7 @@ this.client.on('ready', async () => {
       if (!this.client.info || !this.businessPhoneNumber) {
         console.warn('⚠️ Timed out waiting for client info, attempting to get groups anyway');
       }
-      
+
       // Force a sync before getting chats
       try {
         await this.client.getState();
@@ -1145,13 +1828,17 @@ this.client.on('ready', async () => {
         console.warn('⚠️ Could not get client state:', stateError.message);
       }
       
-      // Use Promise.race with timeout for large-scale operations
+      // Add a small delay before fetching chats to ensure everything is loaded
+      console.log('⏳ Adding a short delay before fetching chats...');
+      await new Promise(resolve => setTimeout(resolve, 2000));
+      
+      console.log('🔍 Client appears ready, fetching chats...');
       const chats = await Promise.race([
         this.client.getChats(),
         new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout getting chats')), 60000))
       ]);
       const groups = chats.filter(chat => chat.isGroup);
-      
+
       console.log(`✅ Found ${groups.length} groups`);
       
       // For large-scale operations, only log a summary instead of all groups
@@ -1180,10 +1867,8 @@ this.client.on('ready', async () => {
             this.partialGroupRefreshScheduled = false;
           }, 60000); // Wait 1 minute before refreshing to avoid rate limits
         }
-      } else if (groups.length >= 400) {
-        console.log('🎉 All expected groups loaded successfully!');
       }
-      
+
       return groups;
     } catch (error) {
       console.error(`❌ Group initialization failed (attempt ${attempt}/${maxAttempts}):`, error.message);
@@ -1200,12 +1885,12 @@ this.client.on('ready', async () => {
       } catch (stateError) {
         console.warn('⚠️ Could not get client state:', stateError.message);
       }
-      
+
       if (attempt < maxAttempts) {
         // Exponential backoff with jitter for more reliable retry
-        const baseDelay = 5000;
-        const maxDelay = 60000; // Increased from 45s to 60s for large-scale operations
-        const expBackoff = baseDelay * Math.pow(1.5, attempt - 1);
+        const baseDelay = 15000; // Increased from 5s to 15s
+        const maxDelay = 60000; // Cap at 60 seconds
+        const expBackoff = baseDelay * Math.pow(2.0, attempt - 1); // Increased factor from 1.5 to 2.0
         const jitter = Math.random() * 2000 - 1000; // ±1s jitter
         const delay = Math.min(expBackoff + jitter, maxDelay);
         
@@ -1217,7 +1902,7 @@ this.client.on('ready', async () => {
       console.log('⚠️ Group initialization failed after all attempts');
       console.log('📝 The application will continue running and retry group initialization periodically');
       
-      // For large-scale operations, ensure we have a periodic retry mechanism
+      // Ensure we have a periodic retry mechanism
       if (!this.groupRefreshInterval) {
         console.log('🔄 Setting up periodic group refresh every 5 minutes');
         this.groupRefreshInterval = setInterval(() => {
@@ -1230,12 +1915,47 @@ this.client.on('ready', async () => {
     }
   }
 
-  // Utility methods
-  isBusinessMessage(message) {
-    if (!message.from || !this.businessPhoneNumber) return false;
-    const isFromBusiness = message.author && message.author.includes(this.businessPhoneNumber);
-    const isStatus = message.isStatus === true || message.from.includes('status@broadcast');
-    return isFromBusiness || isStatus;
+  /**
+   * Handle incoming messages
+   */
+  async handleIncomingMessage(message) {
+    try {
+      // Skip non-group messages
+      if (!message.from.includes('@g.us')) return;
+
+      console.log(`📩 New message from group: ${message.from}`);
+
+      // Process message with your message processor
+      if (this.messageProcessor) {
+        const processedMessage = await this.messageProcessor.processMessage(message);
+
+        if (processedMessage && this.dbService) {
+          await this.dbService.saveMessage(
+            processedMessage.groupId,
+            processedMessage.groupName,
+            processedMessage.senderName,
+            processedMessage.messageText,
+            processedMessage.timestamp
+          );
+        }
+      }
+    } catch (error) {
+      console.error('❌ Error handling message:', error);
+    }
+  }
+
+  /**
+   * Force group initialization
+   */
+  async forceGroupInitialization() {
+    console.log('🔄 Manually triggering group initialization...');
+
+    if (!this.isClientReady) {
+      console.warn('⚠️ Client not ready, cannot initialize groups');
+      return [];
+    }
+
+    return await this.initializeGroups(1, 3);
   }
 
   /**
@@ -1250,80 +1970,23 @@ this.client.on('ready', async () => {
       businessNumber: this.businessPhoneNumber
     };
   }
-  
-  /**
-   * Force group initialization - useful for backend-only mode
-   * @returns {Promise<Array>} - List of groups
-   */
-  async forceGroupInitialization() {
-    console.log('🔄 Manually triggering group initialization...');
-    
-    if (!this.isClientReady) {
-      console.warn('⚠️ Client not ready, cannot initialize groups');
-      return [];
-    }
-    
-    try {
-      // Force a sync before getting chats
-      try {
-        await this.client.getState();
-        console.log('✅ Client state synchronized');
-      } catch (stateError) {
-        console.warn('⚠️ Could not get client state:', stateError.message);
-      }
-      
-      // Wait a moment for sync to complete
-      await new Promise(resolve => setTimeout(resolve, 3000));
-      
-      // Get groups
-      return await this.initializeGroups(1, 5);
-    } catch (error) {
-      console.error('❌ Manual group initialization failed:', error.message);
-      return [];
-    }
-  }
 
   /**
-   * Manual logout detection and handling
-   */
-  async handleManualLogout() {
-    console.log('👋 Manual logout detected');
-    this.isAuthenticated = false;
-    this.isClientReady = false;
-    await this.clearSession();
-    
-    // Wait a moment then reinitialize for fresh login
-    setTimeout(() => {
-      console.log('🔄 Ready for fresh authentication');
-      this.initializeClient(true);
-    }, 2000);
-  }
-
-  /**
-   * Graceful shutdown for backend-only implementation
+   * Shutdown client
    */
   async shutdown() {
-    console.log('🛑 Shutting down Persistent WhatsApp Client...');
-    this.stopConnectionMonitoring();
-    
+    console.log('🛑 Shutting down WhatsApp client...');
+
+    if (this.connectionMonitor) {
+      clearInterval(this.connectionMonitor);
+    }
+
     if (this.client) {
       try {
-        // Force destroy the client with a timeout to prevent hanging
-        const destroyPromise = this.client.destroy();
-        const timeoutPromise = new Promise((_, reject) => 
-          setTimeout(() => reject(new Error('Client destroy timeout')), 10000)
-        );
-        
-        await Promise.race([destroyPromise, timeoutPromise])
-          .catch(error => {
-            console.warn('⚠️ Client destroy timed out or failed:', error.message);
-            console.log('Continuing shutdown process...');
-          });
-          
+        await this.client.destroy();
         console.log('✅ Client shutdown complete');
       } catch (error) {
         console.error('❌ Error during shutdown:', error);
-        console.log('Continuing shutdown process despite error...');
       }
     }
   }

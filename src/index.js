@@ -8,13 +8,19 @@ require('dotenv').config();
 const DatabaseService = require('./services/databaseService');
 const MessageProcessor = require('./services/messageProcessor');
 const WhatsAppClient = require('./services/whatsappClient');
+const AttachmentService = require('./services/attachmentService');
+const DocumentViewerService = require('./services/documentViewerService');
+const MongoSessionCleanupService = require('./services/mongoSessionCleanupService');
 const Server = require('./server');
 
 class WhatsAppGroupCapture {
   constructor() {
     this.dbService = new DatabaseService();
+    this.attachmentService = new AttachmentService();
     this.messageProcessor = new MessageProcessor();
-    this.server = new Server(this.dbService);
+    this.documentViewerService = new DocumentViewerService(this.attachmentService);
+    this.mongoSessionCleanupService = new MongoSessionCleanupService();
+    this.server = new Server(this.dbService, this.documentViewerService);
     this.whatsappClient = new WhatsAppClient(this.messageProcessor, this.dbService, this.server);
   }
 
@@ -130,7 +136,12 @@ class WhatsAppGroupCapture {
   async shutdown() {
     try {
       console.log('Shutting down application...');
-      
+
+      const activeTimers = setTimeout(() => {}, 0);
+      for (let i = 0; i < activeTimers; i++) {
+        clearTimeout(i);
+        clearInterval(i);
+      }
       // Check if server was started
       if (this.server && typeof this.server.stop === 'function') {
         try {
@@ -200,6 +211,10 @@ async function main() {
   
   const app = new WhatsAppGroupCapture();
   global.app = app; // For graceful shutdown
+  
+  // Expose services globally for API access
+  global.app.documentViewerService = app.documentViewerService;
+  global.app.mongoSessionCleanupService = app.mongoSessionCleanupService;
   await app.start(!backendOnly); // Pass false to disable web server in backend-only mode
 }
 

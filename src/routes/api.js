@@ -10,7 +10,7 @@ const express = require('express');
  * @param {Object} dbService - Database service
  * @returns {Object} - Express router
  */
-module.exports = function(dbService) {
+module.exports = function(dbService, documentViewerService = null) {
   const router = express.Router();
 
   /**
@@ -116,6 +116,117 @@ module.exports = function(dbService) {
       console.error('Error refreshing QR code:', error);
       res.status(500).json({ 
         error: 'Failed to refresh QR code' 
+      });
+    }
+  });
+
+  /**
+   * Trigger MongoDB session cleanup (for RemoteAuth chunks)
+   * POST /api/cleanup/mongo-sessions
+   */
+  router.post('/cleanup/mongo-sessions', async (req, res) => {
+    try {
+      const mongoSessionCleanupService = global.app?.mongoSessionCleanupService;
+      
+      if (!mongoSessionCleanupService) {
+        return res.status(400).json({
+          error: 'MongoDB session cleanup service not available'
+        });
+      }
+      
+      // Trigger session cleanup in background
+      mongoSessionCleanupService.triggerManualSessionCleanup().catch(console.error);
+      
+      res.json({ 
+        success: true, 
+        message: 'MongoDB session cleanup triggered successfully',
+        note: 'This only cleans WhatsApp session data, NOT your messages'
+      });
+    } catch (error) {
+      console.error('Error triggering MongoDB session cleanup:', error);
+      res.status(500).json({ 
+        error: 'Failed to trigger MongoDB session cleanup' 
+      });
+    }
+  });
+
+  /**
+   * Get MongoDB session storage info
+   * GET /api/cleanup/mongo-sessions/info
+   */
+  router.get('/cleanup/mongo-sessions/info', async (req, res) => {
+    try {
+      const mongoSessionCleanupService = global.app?.mongoSessionCleanupService;
+      
+      if (!mongoSessionCleanupService) {
+        return res.status(400).json({
+          error: 'MongoDB session cleanup service not available'
+        });
+      }
+      
+      const info = await mongoSessionCleanupService.getSessionStorageInfo();
+      res.json(info);
+    } catch (error) {
+      console.error('Error getting MongoDB session info:', error);
+      res.status(500).json({ 
+        error: 'Failed to get MongoDB session info' 
+      });
+    }
+  });
+
+  /**
+   * Get document statistics
+   * GET /api/documents/stats
+   */
+  router.get('/documents/stats', async (req, res) => {
+    try {
+      if (!documentViewerService) {
+        return res.status(400).json({
+          error: 'Document viewer service not available'
+        });
+      }
+      
+      // Get recent messages with attachments
+      const messages = await dbService.getAllMessages(1000, 0);
+      const stats = await documentViewerService.getDocumentStats(messages);
+      
+      res.json(stats);
+    } catch (error) {
+      console.error('Error getting document stats:', error);
+      res.status(500).json({ 
+        error: 'Failed to get document statistics' 
+      });
+    }
+  });
+
+  /**
+   * Search documents
+   * GET /api/documents/search?q=query
+   */
+  router.get('/documents/search', async (req, res) => {
+    try {
+      if (!documentViewerService) {
+        return res.status(400).json({
+          error: 'Document viewer service not available'
+        });
+      }
+      
+      const query = req.query.q || '';
+      const limit = parseInt(req.query.limit) || 100;
+      
+      // Get recent messages
+      const messages = await dbService.getAllMessages(limit, 0);
+      const documents = await documentViewerService.searchDocuments(query, messages);
+      
+      res.json({
+        query,
+        total: documents.length,
+        documents
+      });
+    } catch (error) {
+      console.error('Error searching documents:', error);
+      res.status(500).json({ 
+        error: 'Failed to search documents' 
       });
     }
   });

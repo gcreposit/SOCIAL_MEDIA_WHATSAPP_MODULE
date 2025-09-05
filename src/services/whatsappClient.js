@@ -50,6 +50,7 @@ class PersistentWhatsAppClient {
     this.currentQRCode = null;
     this.qrCodeBase64 = null;
     this.lastQRCodeTime = null;
+
   }
 
   
@@ -1122,56 +1123,6 @@ class PersistentWhatsAppClient {
   /**
    * Handle initialization failure with improved error classification and recovery
    */
-  // async handleInitializationFailure(error) {
-  //   this.reconnectAttempts++;
-
-  //   // Log detailed error information for better debugging
-  //   console.log('📊 Error type:', error.constructor.name);
-  //   console.log('📊 Error message:', error.message);
-  //   if (error.stack) {
-  //     console.log('📊 Error stack (first 3 lines):', error.stack.split('\n').slice(0, 3).join('\n'));
-  //   }
-
-  //   // Categorize errors for better handling
-  //   const errorMessage = error.message.toLowerCase();
-  //   let additionalDelay = 0;
-
-  //   // Browser/Protocol errors
-  //   if (errorMessage.includes('protocol error') ||
-  //     errorMessage.includes('session closed') ||
-  //     errorMessage.includes('browser has disconnected') ||
-  //     errorMessage.includes('target closed') ||
-  //     errorMessage.includes('connection reset')) {
-  //     console.log('🔄 Browser connection issue detected, adding recovery time...');
-  //     additionalDelay = 5000; // Add 5 seconds for browser issues
-  //   }
-  //   // Browser installation/launch errors
-  //   else if (errorMessage.includes('enoent') ||
-  //     errorMessage.includes('failed to launch') ||
-  //     errorMessage.includes('executable path')) {
-  //     console.error('🚨 Critical browser error:', error.message);
-  //     console.log('💡 Suggestion: Please check Chrome/Chromium installation');
-  //     additionalDelay = 10000; // Add 10 seconds for installation issues
-  //   }
-
-  //   if (this.reconnectAttempts < this.maxReconnectAttempts) {
-  //     // Increase base delay and use exponential backoff with a higher factor
-  //     const baseDelay = 15000 + additionalDelay;
-  //     const delay = Math.min(baseDelay * Math.pow(1.5, this.reconnectAttempts - 1), 180000);
-  //     console.log(`🔄 Retry initialization in ${delay / 1000}s (attempt ${this.reconnectAttempts}/${this.maxReconnectAttempts})`);
-
-  //     setTimeout(async () => {
-  //       // Clear session earlier to avoid wasting time with invalid sessions
-  //       const shouldClearSession = this.reconnectAttempts > 3 ||
-  //         errorMessage.includes('auth') ||
-  //         errorMessage.includes('session');
-  //       await this.initializeClient(shouldClearSession);
-  //     }, delay);
-  //   } else {
-  //     console.error('🛑 Initialization failed after maximum attempts');
-  //     console.log('💡 Manual intervention required - please restart the application');
-  //   }
-  // }
     async handleInitializationFailure(error) {
     this.reconnectAttempts++;
 
@@ -1935,7 +1886,19 @@ class PersistentWhatsAppClient {
             processedMessage.groupName,
             processedMessage.senderName,
             processedMessage.messageText,
-            processedMessage.timestamp
+            processedMessage.timestamp,
+            processedMessage.imageAttachmentPath,
+            processedMessage.documentAttachmentPath,
+            processedMessage.videoAttachmentPath,
+            processedMessage.audioAttachmentPath,
+            processedMessage.linkMetadata,
+            processedMessage.batchAttachmentPath,
+            processedMessage.batchMetadata,
+            processedMessage.replyToMessageId,
+            processedMessage.replyText,
+            processedMessage.replyAttachmentType,
+            processedMessage.replyAttachmentPath,
+            processedMessage.attachmentType
           );
         }
       }

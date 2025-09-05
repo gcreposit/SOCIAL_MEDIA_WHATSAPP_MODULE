@@ -29,6 +29,7 @@ class DatabaseService {
 
       // Test connection
       const connection = await this.pool.getConnection();
+      console.log('✅ Database connection test successful');
       connection.release();
       this.isConnected = true;
       
@@ -229,6 +230,17 @@ class DatabaseService {
          reply_to_message_id, reply_text, reply_attachment_type, reply_attachment_path, attachment_type) 
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `;
+      // Convert JSON objects to strings if they exist
+      console.log('📝 Preparing data for database insertion:');
+      console.log('- Group ID:', groupId);
+      console.log('- Group Name:', groupName);
+      console.log('- Sender:', senderName);
+      console.log('- Message Text Length:', messageText ? messageText.length : 0);
+      console.log('- Image Path:', imageAttachmentPath);
+      console.log('- Reply To ID:', replyToMessageId);
+      console.log('- Reply Text:', replyText);
+      console.log('- Reply Attachment Type:', replyAttachmentType);
+      console.log('- Reply Attachment Path:', replyAttachmentPath);
       
       // Convert JSON objects to strings if they exist
       console.log('Link metadata before stringify:', linkMetadata);
@@ -249,7 +261,9 @@ class DatabaseService {
       
       console.log('Link metadata after stringify:', linkMetadataStr);
       const batchMetadataStr = batchMetadata ? JSON.stringify(batchMetadata) : null;
-      
+
+      console.log('🔄 Executing database query...');
+
       const [result] = await this.pool.query(query, [
         groupId,
         groupName,
@@ -269,7 +283,10 @@ class DatabaseService {
         replyAttachmentPath,
         attachmentType
       ]);
-      
+      console.log('✅ DATABASE SAVE SUCCESSFUL!');
+      console.log('Insert ID:', result.insertId);
+      console.log('Affected Rows:', result.affectedRows);
+      console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
       return result.insertId;
     } catch (error) {
       console.error('Error saving message:', error);

@@ -671,29 +671,6 @@ class MessageProcessor {
       attachmentType = 'batch';
     }
     const formattedMessage = {
-  groupId: message.groupId,
-  groupName: message.groupName,
-  senderName: message.senderName,
-  messageText: message.messageText,
-  timestamp: message.timestamp,
-  imageAttachmentPath: message.imageAttachmentPath || null,
-  documentAttachmentPath: message.documentAttachmentPath || null,
-  videoAttachmentPath: message.videoAttachmentPath || null,
-  audioAttachmentPath: message.audioAttachmentPath || null,
-  linkMetadata: message.linkMetadata || null,
-  batchAttachmentPath: message.batchAttachmentPath || null,
-  batchMetadata: message.batchMetadata || null,
-  replyToMessageId: message.replyToMessageId || null,
-  replyText: message.replyText || null,
-  replyAttachmentType: message.replyAttachmentType || null,
-  replyAttachmentPath: message.replyAttachmentPath || null,
-  attachmentType: message.attachmentType || attachmentType
-};
-
-console.log(JSON.stringify(formattedMessage, null, 2));
-
-    
-    return {
       groupId: message.groupId,
       groupName: message.groupName,
       senderName: message.senderName,
@@ -710,8 +687,12 @@ console.log(JSON.stringify(formattedMessage, null, 2));
       replyText: message.replyText || null,
       replyAttachmentType: message.replyAttachmentType || null,
       replyAttachmentPath: message.replyAttachmentPath || null,
-      attachmentType: message.attachmentType || attachmentType
+      attachmentType: attachmentType
     };
+
+    console.log('🔍 FINAL FORMATTED MESSAGE:', JSON.stringify(formattedMessage, null, 2));
+    
+    return formattedMessage;
   }
 }
 

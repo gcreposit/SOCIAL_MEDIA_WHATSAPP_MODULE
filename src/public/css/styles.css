@@ -266,3 +266,288 @@ nav a.active {
     border-bottom: 1px solid #ddd;
   }
 }
+/* Docum
+ent viewing styles */
+.attachment {
+  margin: 10px 0;
+  padding: 10px;
+  background: #f8f9fa;
+  border-radius: 8px;
+  border-left: 4px solid #128C7E;
+}
+
+.attachment-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+
+.attachment-info {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.attachment-icon {
+  width: 24px;
+  height: 24px;
+  background: #128C7E;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: white;
+  font-size: 12px;
+  font-weight: bold;
+}
+
+.attachment-details {
+  flex: 1;
+}
+
+.attachment-name {
+  font-weight: 500;
+  color: #333;
+  margin-bottom: 2px;
+}
+
+.attachment-meta {
+  font-size: 12px;
+  color: #666;
+}
+
+.attachment-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.btn-attachment {
+  padding: 4px 8px;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 12px;
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  transition: background-color 0.2s;
+}
+
+.btn-view {
+  background: #128C7E;
+  color: white;
+}
+
+.btn-view:hover {
+  background: #0f7a6f;
+}
+
+.btn-download {
+  background: #34495e;
+  color: white;
+}
+
+.btn-download:hover {
+  background: #2c3e50;
+}
+
+.btn-info {
+  background: #3498db;
+  color: white;
+}
+
+.btn-info:hover {
+  background: #2980b9;
+}
+
+/* Document preview modal */
+.document-modal {
+  display: none;
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(0, 0, 0, 0.8);
+  z-index: 1000;
+}
+
+.document-modal.active {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.document-modal-content {
+  background: white;
+  border-radius: 8px;
+  max-width: 90%;
+  max-height: 90%;
+  overflow: hidden;
+  position: relative;
+}
+
+.document-modal-header {
+  padding: 15px 20px;
+  border-bottom: 1px solid #ddd;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.document-modal-title {
+  font-weight: 500;
+  margin: 0;
+}
+
+.document-modal-close {
+  background: none;
+  border: none;
+  font-size: 24px;
+  cursor: pointer;
+  color: #666;
+  padding: 0;
+  width: 30px;
+  height: 30px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+}
+
+.document-modal-close:hover {
+  background: #f0f0f0;
+}
+
+.document-modal-body {
+  padding: 20px;
+  max-height: 70vh;
+  overflow: auto;
+}
+
+.document-preview {
+  width: 100%;
+  height: 70vh;
+  border: none;
+}
+
+.document-text-preview {
+  white-space: pre-wrap;
+  font-family: 'Courier New', monospace;
+  font-size: 14px;
+  line-height: 1.4;
+  background: #f8f9fa;
+  padding: 15px;
+  border-radius: 4px;
+  max-height: 60vh;
+  overflow: auto;
+}
+
+/* Data cleanup section */
+.cleanup-section {
+  background: white;
+  padding: 20px;
+  border-radius: 8px;
+  margin: 20px 0;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+.cleanup-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 15px;
+}
+
+.cleanup-stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 15px;
+  margin-bottom: 20px;
+}
+
+.stat-card {
+  background: #f8f9fa;
+  padding: 15px;
+  border-radius: 6px;
+  text-align: center;
+}
+
+.stat-value {
+  font-size: 24px;
+  font-weight: bold;
+  color: #128C7E;
+  margin-bottom: 5px;
+}
+
+.stat-label {
+  font-size: 14px;
+  color: #666;
+}
+
+.btn-cleanup {
+  background: #e74c3c;
+  color: white;
+  border: none;
+  padding: 10px 20px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 14px;
+  transition: background-color 0.2s;
+}
+
+.btn-cleanup:hover {
+  background: #c0392b;
+}
+
+.btn-cleanup:disabled {
+  background: #bdc3c7;
+  cursor: not-allowed;
+}
+
+/* Reply attachment styles */
+.reply-attachment {
+  background: #e8f5e8;
+  border-left: 3px solid #128C7E;
+  padding: 8px 12px;
+  margin: 5px 0;
+  border-radius: 0 6px 6px 0;
+  font-size: 13px;
+}
+
+.reply-attachment-label {
+  font-weight: 500;
+  color: #128C7E;
+  margin-bottom: 3px;
+}
+
+.reply-attachment-info {
+  color: #666;
+  font-size: 12px;
+}
+
+/* Image preview styles */
+.image-attachment {
+  max-width: 300px;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: transform 0.2s;
+}
+
+.image-attachment:hover {
+  transform: scale(1.02);
+}
+
+/* Video attachment styles */
+.video-attachment {
+  max-width: 300px;
+  border-radius: 8px;
+}
+
+/* Audio attachment styles */
+.audio-attachment {
+  width: 100%;
+  max-width: 300px;
+}

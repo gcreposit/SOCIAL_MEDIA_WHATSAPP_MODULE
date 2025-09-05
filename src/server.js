@@ -14,8 +14,9 @@ class Server {
    * Constructor
    * @param {Object} dbService - Database service
    */
-  constructor(dbService) {
+  constructor(dbService, documentViewerService = null) {
     this.dbService = dbService;
+    this.documentViewerService = documentViewerService;
     this.app = express();
     this.server = http.createServer(this.app);
     this.io = socketIo(this.server);
@@ -45,7 +46,12 @@ class Server {
    */
   setupRoutes() {
     // API routes
-    this.app.use('/api', apiRoutes(this.dbService));
+    this.app.use('/api', apiRoutes(this.dbService, this.documentViewerService));
+    
+    // Document viewing routes
+    if (this.documentViewerService) {
+      this.setupDocumentRoutes();
+    }
     
     // Main route (Table View)
     this.app.get('/', (req, res) => {
@@ -68,6 +74,119 @@ class Server {
     });
   }
   
+  /**
+   * Set up document viewing routes
+   */
+  setupDocumentRoutes() {
+    const fs = require('fs');
+    
+    // PDF preview route
+    this.app.get('/api/documents/preview/pdf/:path', async (req, res) => {
+      try {
+        const relativePath = decodeURIComponent(req.params.path);
+        const docInfo = await this.documentViewerService.getDocumentInfo(relativePath);
+        
+        if (!docInfo || !fs.existsSync(docInfo.absolutePath)) {
+          return res.status(404).json({ error: 'Document not found' });
+        }
+        
+        if (docInfo.extension !== 'pdf') {
+          return res.status(400).json({ error: 'Not a PDF file' });
+        }
+        
+        res.setHeader('Content-Type', 'application/pdf');
+        res.setHeader('Content-Disposition', `inline; filename="${docInfo.filename}"`);
+        
+        const fileStream = fs.createReadStream(docInfo.absolutePath);
+        fileStream.pipe(res);
+      } catch (error) {
+        console.error('Error serving PDF:', error);
+        res.status(500).json({ error: 'Error serving PDF' });
+      }
+    });
+    
+    // Text file preview route
+    this.app.get('/api/documents/preview/text/:path', async (req, res) => {
+      try {
+        const relativePath = decodeURIComponent(req.params.path);
+        const content = await this.documentViewerService.getTextContent(relativePath);
+        
+        if (!content) {
+          return res.status(404).json({ error: 'Document not found or cannot read content' });
+        }
+        
+        res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+        res.send(content);
+      } catch (error) {
+        console.error('Error serving text file:', error);
+        res.status(500).json({ error: 'Error serving text file' });
+      }
+    });
+    
+    // Office document preview route (redirect to download)
+    this.app.get('/api/documents/preview/office/:path', async (req, res) => {
+      try {
+        const relativePath = decodeURIComponent(req.params.path);
+        const downloadUrl = this.documentViewerService.getDownloadUrl(relativePath);
+        
+        // For office documents, redirect to download since they need external viewers
+        res.json({
+          message: 'Office documents require external viewer',
+          downloadUrl: downloadUrl,
+          suggestion: 'Please download the file to view it in Microsoft Office or compatible application'
+        });
+      } catch (error) {
+        console.error('Error handling office document:', error);
+        res.status(500).json({ error: 'Error handling office document' });
+      }
+    });
+    
+    // Document download route
+    this.app.get('/api/documents/download/:path', async (req, res) => {
+      try {
+        const relativePath = decodeURIComponent(req.params.path);
+        const docInfo = await this.documentViewerService.getDocumentInfo(relativePath);
+        
+        if (!docInfo || !fs.existsSync(docInfo.absolutePath)) {
+          return res.status(404).json({ error: 'Document not found' });
+        }
+        
+        res.setHeader('Content-Type', docInfo.mimeType);
+        res.setHeader('Content-Disposition', `attachment; filename="${docInfo.filename}"`);
+        res.setHeader('Content-Length', docInfo.size);
+        
+        const fileStream = fs.createReadStream(docInfo.absolutePath);
+        fileStream.pipe(res);
+      } catch (error) {
+        console.error('Error downloading document:', error);
+        res.status(500).json({ error: 'Error downloading document' });
+      }
+    });
+    
+    // Document info route
+    this.app.get('/api/documents/info/:path', async (req, res) => {
+      try {
+        const relativePath = decodeURIComponent(req.params.path);
+        const docInfo = await this.documentViewerService.getDocumentInfo(relativePath);
+        
+        if (!docInfo) {
+          return res.status(404).json({ error: 'Document not found' });
+        }
+        
+        res.json({
+          ...docInfo,
+          previewUrl: this.documentViewerService.getPreviewUrl(relativePath),
+          downloadUrl: this.documentViewerService.getDownloadUrl(relativePath),
+          canPreview: this.documentViewerService.canPreview(relativePath),
+          needsExternalViewer: this.documentViewerService.needsExternalViewer(relativePath)
+        });
+      } catch (error) {
+        console.error('Error getting document info:', error);
+        res.status(500).json({ error: 'Error getting document info' });
+      }
+    });
+  }
+
   /**
    * Set up Socket.io event handlers
    */

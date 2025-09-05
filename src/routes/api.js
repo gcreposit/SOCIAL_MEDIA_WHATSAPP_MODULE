@@ -126,6 +126,12 @@ module.exports = function(dbService, documentViewerService = null) {
    */
   router.post('/cleanup/mongo-sessions', async (req, res) => {
     try {
+      // MongoDB session cleanup service has been disabled
+      return res.status(400).json({
+        error: 'MongoDB session cleanup service has been disabled'
+      });
+      
+      /* Service disabled
       const mongoSessionCleanupService = global.app?.mongoSessionCleanupService;
       
       if (!mongoSessionCleanupService) {
@@ -142,6 +148,7 @@ module.exports = function(dbService, documentViewerService = null) {
         message: 'MongoDB session cleanup triggered successfully',
         note: 'This only cleans WhatsApp session data, NOT your messages'
       });
+      */
     } catch (error) {
       console.error('Error triggering MongoDB session cleanup:', error);
       res.status(500).json({ 
@@ -156,6 +163,12 @@ module.exports = function(dbService, documentViewerService = null) {
    */
   router.get('/cleanup/mongo-sessions/info', async (req, res) => {
     try {
+      // MongoDB session cleanup service has been disabled
+      return res.status(400).json({
+        error: 'MongoDB session cleanup service has been disabled'
+      });
+      
+      /* Service disabled
       const mongoSessionCleanupService = global.app?.mongoSessionCleanupService;
       
       if (!mongoSessionCleanupService) {
@@ -166,6 +179,7 @@ module.exports = function(dbService, documentViewerService = null) {
       
       const info = await mongoSessionCleanupService.getSessionStorageInfo();
       res.json(info);
+      */
     } catch (error) {
       console.error('Error getting MongoDB session info:', error);
       res.status(500).json({ 

@@ -179,24 +179,8 @@ class WhatsAppGroupCapture {
   }
 }
 
-// Handle process termination
-process.on('SIGINT', async () => {
-  console.log('\nReceived SIGINT. Shutting down gracefully...');
-  if (global.app) {
-    await global.app.shutdown();
-  } else {
-    process.exit(0);
-  }
-});
-
-process.on('SIGTERM', async () => {
-  console.log('\nReceived SIGTERM. Shutting down gracefully...');
-  if (global.app) {
-    await global.app.shutdown();
-  } else {
-    process.exit(0);
-  }
-});
+// Initialize global shutdown flag
+global.isShuttingDown = false;
 
 // Start the application
 async function main() {
@@ -207,22 +191,19 @@ async function main() {
     console.log('Starting in backend-only mode (no web server)');
   }
   
+  // Check if shutdown signal received during startup
+  if (global.isShuttingDown) {
+    console.log('🛑 Shutdown signal detected during startup, aborting...');
+    process.exit(0);
+  }
+  
   const app = new WhatsAppGroupCapture();
   global.app = app; // For graceful shutdown
+  global.whatsappClient = app.whatsappClient; // For signal handlers
+  global.mongoose = require('mongoose'); // For signal handlers
   
   // Expose services globally for API access
   global.app.documentViewerService = app.documentViewerService;
-  
-  // Register signal handlers for graceful shutdown
-  process.on('SIGINT', async () => {
-    console.log('\n🛑 Received SIGINT signal');
-    await app.shutdown();
-  });
-  
-  process.on('SIGTERM', async () => {
-    console.log('\n🛑 Received SIGTERM signal');
-    await app.shutdown();
-  });
   
   await app.start(!backendOnly); // Pass false to disable web server in backend-only mode
   
@@ -258,6 +239,65 @@ async function gracefulShutdown() {
     process.exit(1);
   }
 }
+
+// Enhanced signal handling with proper shutdown detection
+process.on('SIGINT', async () => {
+  console.log('\n🛑 Received SIGINT signal. Gracefully shutting down...');
+  
+  global.isShuttingDown = true;
+  
+  try {
+    // Allow some time for current operations to complete
+    await new Promise(resolve => setTimeout(resolve, 2000));
+    
+    if (global.whatsappClient) {
+      await global.whatsappClient.shutdown();
+    }
+    
+    if (global.mongoose && global.mongoose.connection) {
+      await global.mongoose.disconnect();
+    }
+    
+    if (global.app) {
+      await global.app.shutdown();
+    }
+    
+    console.log('✅ Graceful shutdown completed');
+    process.exit(0);
+  } catch (error) {
+    console.error('❌ Error during shutdown:', error);
+    process.exit(1);
+  }
+});
+
+process.on('SIGTERM', async () => {
+  console.log('\n🛑 Received SIGTERM signal. Gracefully shutting down...');
+  
+  global.isShuttingDown = true;
+  
+  try {
+    // Allow some time for current operations to complete
+    await new Promise(resolve => setTimeout(resolve, 2000));
+    
+    if (global.whatsappClient) {
+      await global.whatsappClient.shutdown();
+    }
+    
+    if (global.mongoose && global.mongoose.connection) {
+      await global.mongoose.disconnect();
+    }
+    
+    if (global.app) {
+      await global.app.shutdown();
+    }
+    
+    console.log('✅ Graceful shutdown completed');
+    process.exit(0);
+  } catch (error) {
+    console.error('❌ Error during shutdown:', error);
+    process.exit(1);
+  }
+});
 
 main().catch(error => {
   console.error('Failed to start application:', error);

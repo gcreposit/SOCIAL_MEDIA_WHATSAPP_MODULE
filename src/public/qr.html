@@ -329,6 +329,7 @@
         </div>
     </div>
 
+    <script src="/socket.io/socket.io.js"></script>
     <script>
         let statusCheckInterval;
         let qrTimerInterval;
@@ -337,6 +338,42 @@
         let lastAuthCheck = 0;
         let qrAttemptCount = 0;
         let firstQRTime = null;
+        
+        // Initialize Socket.io connection
+        const socket = io();
+        
+        // Listen for real-time WhatsApp status updates
+        socket.on('whatsapp-status-update', (status) => {
+            console.log('Received real-time status update:', status);
+            handleStatusUpdate(status);
+        });
+        
+        // Handle status updates (both from polling and real-time)
+        function handleStatusUpdate(data) {
+            console.log('Handling status update:', data);
+            hideAllContainers();
+
+            if (data.isAuthenticated === true && data.isReady === true) {
+                console.log('Authentication detected!');
+                updateConnectionStatus('connected', `Connected as: ${data.businessNumber || 'WhatsApp User'}`);
+                showAuthenticated(data.businessNumber);
+                clearAllIntervals();
+            } else if (data.qrCode) {
+                updateConnectionStatus('connecting', 'Waiting for QR scan...');
+                showQRCode(data.qrCode, data.qrCodeTime);
+                // Continue checking status while waiting for scan - increase frequency when waiting for auth
+                if (!statusCheckInterval) {
+                    statusCheckInterval = setInterval(checkStatus, 2000); // Check every 2 seconds
+                }
+            } else {
+                updateConnectionStatus('connecting', data.message || 'Waiting for QR code...');
+                showError(data.message || 'Waiting for QR code...');
+                // Retry more frequently if no QR code yet
+                if (!statusCheckInterval) {
+                    statusCheckInterval = setInterval(checkStatus, 3000);
+                }
+            }
+        }
 
         // Check authentication status
         async function checkStatus() {
@@ -350,29 +387,19 @@
 
                 const data = await response.json();
                 console.log('Status response:', data); // Debug log
-
-                hideAllContainers();
-
-                if (data.authenticated === true) {
-                    console.log('Authentication detected!'); // Debug log
-                    updateConnectionStatus('connected', `Connected as: ${data.businessPhoneNumber || 'WhatsApp User'}`);
-                    showAuthenticated(data.businessPhoneNumber);
-                    clearAllIntervals();
-                } else if (data.qrCode) {
-                    updateConnectionStatus('connecting', 'Waiting for QR scan...');
-                    showQRCode(data.qrCode, data.qrCodeTime);
-                    // Continue checking status while waiting for scan - increase frequency when waiting for auth
-                    if (!statusCheckInterval) {
-                        statusCheckInterval = setInterval(checkStatus, 2000); // Check every 2 seconds
-                    }
-                } else {
-                    updateConnectionStatus('connecting', data.message || 'Waiting for QR code...');
-                    showError(data.message || 'Waiting for QR code...');
-                    // Retry more frequently if no QR code yet
-                    if (!statusCheckInterval) {
-                        statusCheckInterval = setInterval(checkStatus, 3000);
-                    }
-                }
+                
+                // Convert old API format to new format for consistency
+                const normalizedData = {
+                    isAuthenticated: data.authenticated || data.isAuthenticated,
+                    isReady: data.ready || data.isReady,
+                    businessNumber: data.businessPhoneNumber || data.businessNumber,
+                    qrCode: data.qrCode,
+                    qrCodeTime: data.qrCodeTime,
+                    message: data.message
+                };
+                
+                handleStatusUpdate(normalizedData);
+                
             } catch (error) {
                 console.error('Error checking status:', error);
                 updateConnectionStatus('error', 'Server connection failed');

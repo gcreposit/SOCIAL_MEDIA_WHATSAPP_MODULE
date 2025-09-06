@@ -30,6 +30,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // Set up Socket.io event handlers
   setupSocketHandlers();
+  
+  // Check initial WhatsApp connection status
+  checkWhatsAppStatus();
 });
 
 /**
@@ -360,6 +363,11 @@ function setupSocketHandlers() {
       const currentCount = parseInt(messageCountDisplay.textContent);
       messageCountDisplay.textContent = `${currentCount + 1} messages`;
     }
+  });
+  
+  // WhatsApp status update event
+  socket.on('whatsapp-status-update', (status) => {
+    updateConnectionStatus(status);
   });
 }
 
@@ -712,6 +720,53 @@ async function triggerDataCleanup() {
       button.disabled = false;
       button.textContent = 'Clean Up Data';
     }
+  }
+}
+
+/**
+ * Check WhatsApp connection status
+ */
+async function checkWhatsAppStatus() {
+  try {
+    const response = await fetch('/api/whatsapp/status');
+    if (!response.ok) throw new Error('Failed to fetch status');
+    
+    const status = await response.json();
+    updateConnectionStatus(status);
+  } catch (error) {
+    console.error('Error checking WhatsApp status:', error);
+    updateConnectionStatus({
+      isAuthenticated: false,
+      isReady: false,
+      message: 'Connection check failed'
+    });
+  }
+}
+
+/**
+ * Update connection status display
+ */
+function updateConnectionStatus(status) {
+  const indicator = document.getElementById('connection-indicator');
+  const text = document.getElementById('connection-text');
+  
+  if (!indicator || !text) return; // Elements don't exist on this page
+  
+  // Clear existing classes
+  indicator.className = 'status-indicator';
+  
+  if (status.isAuthenticated && status.isReady) {
+    indicator.classList.add('connected');
+    text.textContent = `Connected as: ${status.businessNumber || 'WhatsApp User'}`;
+  } else if (status.isAuthenticated && !status.isReady) {
+    indicator.classList.add('connecting');
+    text.textContent = 'WhatsApp authenticated, initializing...';
+  } else if (status.qrCode) {
+    indicator.classList.add('connecting');
+    text.textContent = 'Scan QR code to authenticate';
+  } else {
+    indicator.classList.add('connecting');
+    text.textContent = status.message || 'Waiting for connection...';
   }
 }
 

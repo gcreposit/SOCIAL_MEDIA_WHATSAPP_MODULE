@@ -83,8 +83,8 @@ module.exports = function(dbService, documentViewerService = null) {
         });
       }
       
-      console.log('API: Calling getAuthStatus...');
-      const status = whatsappClient.getAuthStatus();
+      console.log('API: Calling getStatus...');
+      const status = whatsappClient.getStatus();
       console.log('API: Returning status:', JSON.stringify(status, null, 2));
       res.json(status);
     } catch (error) {

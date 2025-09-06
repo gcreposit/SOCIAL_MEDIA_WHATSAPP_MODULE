@@ -50,6 +50,49 @@
       border: 1px solid #ddd;
       border-radius: 4px;
     }
+    
+    .connection-status-bar {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin: 10px 0;
+      padding: 8px 12px;
+      background-color: #f8f9fa;
+      border-radius: 6px;
+      border: 1px solid #e9ecef;
+    }
+    
+    .status-indicator {
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+      background-color: #6c757d;
+    }
+    
+    .status-indicator.connecting {
+      background-color: #ffc107;
+      animation: pulse 1.5s infinite;
+    }
+    
+    .status-indicator.connected {
+      background-color: #28a745;
+    }
+    
+    .status-indicator.error {
+      background-color: #dc3545;
+    }
+    
+    @keyframes pulse {
+      0% { opacity: 1; }
+      50% { opacity: 0.5; }
+      100% { opacity: 1; }
+    }
+    
+    #connection-text {
+      font-size: 14px;
+      color: #495057;
+      font-weight: 500;
+    }
   </style>
 </head>
 <body>
@@ -57,6 +100,10 @@
     <header>
       <h1>WhatsApp Message Capture System</h1>
       <p>Monitor and view messages from WhatsApp groups</p>
+      <div class="connection-status-bar">
+        <div class="status-indicator" id="connection-indicator"></div>
+        <span id="connection-text">Checking connection...</span>
+      </div>
       <nav>
         <a href="/" class="active">Table View</a> | 
         <a href="/dashboard.html">Dashboard View</a> | 
@@ -119,6 +166,9 @@
       
       // Load groups for filter
       loadGroups();
+      
+      // Check initial WhatsApp connection status
+      checkWhatsAppStatus();
       
       // Set up event listeners
       setupEventListeners();
@@ -199,6 +249,11 @@
         // Re-render messages with filters applied
         filterMessages();
       });
+      
+      // WhatsApp status update event
+      socket.on('whatsapp-status-update', (status) => {
+        updateConnectionStatus(status);
+      });
     }
     
     /**
@@ -275,6 +330,53 @@
       const minutes = String(date.getMinutes()).padStart(2, '0');
       
       return `${day}/${month}/${year} ${hours}:${minutes}`;
+    }
+    
+    /**
+     * Check WhatsApp connection status
+     */
+    async function checkWhatsAppStatus() {
+      try {
+        const response = await fetch('/api/whatsapp/status');
+        if (!response.ok) throw new Error('Failed to fetch status');
+        
+        const status = await response.json();
+        updateConnectionStatus(status);
+      } catch (error) {
+        console.error('Error checking WhatsApp status:', error);
+        updateConnectionStatus({
+          isAuthenticated: false,
+          isReady: false,
+          message: 'Connection check failed'
+        });
+      }
+    }
+    
+    /**
+     * Update connection status display
+     */
+    function updateConnectionStatus(status) {
+      const indicator = document.getElementById('connection-indicator');
+      const text = document.getElementById('connection-text');
+      
+      if (!indicator || !text) return; // Elements don't exist on this page
+      
+      // Clear existing classes
+      indicator.className = 'status-indicator';
+      
+      if (status.isAuthenticated && status.isReady) {
+        indicator.classList.add('connected');
+        text.textContent = `Connected as: ${status.businessNumber || 'WhatsApp User'}`;
+      } else if (status.isAuthenticated && !status.isReady) {
+        indicator.classList.add('connecting');
+        text.textContent = 'WhatsApp authenticated, initializing...';
+      } else if (status.qrCode) {
+        indicator.classList.add('connecting');
+        text.textContent = 'Scan QR code to authenticate';
+      } else {
+        indicator.classList.add('connecting');
+        text.textContent = status.message || 'Waiting for connection...';
+      }
     }
   </script>
 </body>

@@ -6,9 +6,9 @@
   "scripts": {
     "test": "jest",
     "start": "node src/index.js",
-    "start:backend": "node src/index.js --backend-only",
+    "start:backend": "node --expose-gc src/index.js --backend-only",
     "dev": "nodemon src/index.js",
-    "dev:backend": "nodemon src/index.js --backend-only",
+    "dev:backend": "nodemon src/index.js --backend-only --expose-gc",
     "dev:full": "nodemon src/index.js"
   },
   "keywords": [],

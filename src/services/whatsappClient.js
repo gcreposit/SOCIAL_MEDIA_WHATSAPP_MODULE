@@ -235,39 +235,185 @@ class PersistentWhatsAppClient {
   /**
    * Create new client with persistent settings and enhanced authentication
    */
+  // async createNewClient() {
+  //   console.log('🔧 Creating new WhatsApp client...');
+  //
+  //   let authStrategy;
+  //
+  //   // Add mongoose error handler for network timeouts
+  //   mongoose.connection.on('error', async (err) => {
+  //     if (err.name === 'MongoNetworkTimeoutError' ||
+  //         err.name === 'MongoNetworkError' ||
+  //         err.message.includes('timed out')) {
+  //       console.error('⚠️ MongoDB connection error detected:', err.name);
+  //       console.log('🔄 Attempting to reconnect to MongoDB...');
+  //
+  //       try {
+  //         // Close existing connection if exists
+  //         if (mongoose.connection.readyState !== 0) {
+  //           console.log('🔄 Closing existing MongoDB connection before reconnecting...');
+  //           await mongoose.connection.close();
+  //         }
+  //
+  //         // Reconnect with robust options
+  //         const mongooseOptions = {
+  //           serverSelectionTimeoutMS: 30000,
+  //           socketTimeoutMS: 120000,
+  //           connectTimeoutMS: 60000,
+  //           keepAlive: true,
+  //           keepAliveInitialDelay: 300000
+  //         };
+  //
+  //         await mongoose.connect(this.mongoUri, mongooseOptions);
+  //         console.log('✅ MongoDB reconnected successfully after error');
+  //       } catch (reconnectError) {
+  //         console.error('❌ MongoDB reconnection failed:', reconnectError.message);
+  //       }
+  //     }
+  //   });
+  //
+  //   // Use RemoteAuth with MongoDB if configured
+  //   if (this.useRemoteAuth) {
+  //     try {
+  //       console.log('🔄 Attempting to connect to MongoDB for RemoteAuth...');
+  //
+  //       // Ensure MongoDB connection with proper options for long-running operations
+  //       const mongooseOptions = {
+  //         serverSelectionTimeoutMS: 30000, // 30 seconds timeout for server selection (increased from 10s)
+  //         socketTimeoutMS: 120000, // 2 minutes timeout for socket operations (increased from 45s)
+  //         connectTimeoutMS: 60000, // 1 minute timeout for initial connection (increased from 30s)
+  //         keepAlive: true, // Enable keepAlive to prevent connection timeouts
+  //         keepAliveInitialDelay: 300000 // Send keepAlive packets every 5 minutes
+  //       };
+  //
+  //       // Close existing connection if exists
+  //       if (mongoose.connection.readyState !== 0) {
+  //         console.log('🔄 Closing existing MongoDB connection before reconnecting...');
+  //         await mongoose.connection.close();
+  //       }
+  //
+  //       await mongoose.connect(this.mongoUri, mongooseOptions);
+  //       console.log('✅ MongoDB connected successfully');
+  //
+  //       // Create store with explicit collection name to ensure proper creation
+  //       const store = new MongoStore({
+  //         mongoose: mongoose,
+  //         collectionName: 'whatsapp-RemoteAuth-persistent-whatsapp-client'
+  //       });
+  //
+  //       // Initialize RemoteAuth with more robust settings
+  //       authStrategy = new RemoteAuth({
+  //         store: store,
+  //         backupSyncIntervalMs: 300000, // 5 minutes
+  //         clientId: 'persistent-whatsapp-client',
+  //         dataPath: this.sessionPath,
+  //         rmMaxRetries: 10 // Increase max retries for remote auth
+  //       });
+  //
+  //       console.log('✅ Using RemoteAuth with MongoDB for better session persistence');
+  //     } catch (mongoError) {
+  //       console.warn('⚠️ MongoDB connection failed, falling back to LocalAuth:', mongoError.message);
+  //       authStrategy = this.createLocalAuthStrategy();
+  //     }
+  //   } else {
+  //     authStrategy = this.createLocalAuthStrategy();
+  //   }
+  //
+  //   this.client = new Client({
+  //     authStrategy: authStrategy,
+  //     puppeteer: {
+  //       headless: true,
+  //       args: [
+  //         '--no-sandbox',
+  //         '--disable-setuid-sandbox',
+  //         '--disable-gpu',
+  //         '--disable-dev-shm-usage',
+  //         '--disable-web-security',
+  //         '--disable-features=IsolateOrigins,site-per-process',
+  //         '--disable-site-isolation-trials',
+  //         '--no-experiments',
+  //         '--no-default-browser-check',
+  //         '--disable-extensions',
+  //         '--disable-translate',
+  //         '--disable-sync',
+  //         '--disable-background-networking',
+  //         '--disable-background-timer-throttling',
+  //         '--disable-backgrounding-occluded-windows',
+  //         '--disable-breakpad',
+  //         '--disable-client-side-phishing-detection',
+  //         '--disable-component-extensions-with-background-pages',
+  //         '--disable-default-apps',
+  //         '--disable-features=TranslateUI',
+  //         '--disable-hang-monitor',
+  //         '--disable-ipc-flooding-protection',
+  //         '--disable-popup-blocking',
+  //         '--disable-prompt-on-repost',
+  //         '--disable-renderer-backgrounding',
+  //         '--force-color-profile=srgb',
+  //         '--metrics-recording-only',
+  //         '--mute-audio',
+  //         '--no-first-run',
+  //         '--use-mock-keychain'
+  //       ],
+  //       timeout: 180000, // Reduced from 5 minutes to 3 minutes timeout
+  //       ignoreDefaultArgs: ['--disable-extensions'],
+  //       handleSIGINT: false,
+  //       handleSIGTERM: false,
+  //       handleSIGHUP: false
+  //     },
+  //     qrMaxRetries: 3, // Limit QR retries to 3 instead of infinite
+  //     authTimeoutMs: 120000, // Set auth timeout to 2 minutes instead of infinite
+  //     restartOnAuthFail: true, // Let the library handle auth failures
+  //     takeoverOnConflict: true,
+  //     takeoverTimeoutMs: 15000 // Reduced from 30s to 15s
+  //   });
+  //
+  //   this.registerPersistentEventHandlers();
+  // }
+
+
+
+  /**
+   * Create new client with persistent settings and enhanced authentication
+   */
   async createNewClient() {
     console.log('🔧 Creating new WhatsApp client...');
 
     let authStrategy;
 
+    // Add mongoose error handler for network timeouts
+    mongoose.connection.on('error', async (err) => {
+      if (err.name === 'MongoNetworkTimeoutError' ||
+          err.name === 'MongoNetworkError' ||
+          err.message.includes('timed out')) {
+        console.error('⚠️ MongoDB connection error detected:', err.name);
+        console.log('🔄 Attempting to reconnect to MongoDB...');
+
+        try {
+          await this.reconnectMongoDB();
+          console.log('✅ MongoDB reconnected successfully after error');
+        } catch (reconnectError) {
+          console.error('❌ MongoDB reconnection failed:', reconnectError.message);
+        }
+      }
+    });
+
     // Use RemoteAuth with MongoDB if configured
     if (this.useRemoteAuth) {
       try {
         console.log('🔄 Attempting to connect to MongoDB for RemoteAuth...');
-        
-        // Ensure MongoDB connection with proper options
-        const mongooseOptions = {
-          serverSelectionTimeoutMS: 10000, // 10 seconds timeout for server selection
-          socketTimeoutMS: 45000, // 45 seconds timeout for socket operations
-          connectTimeoutMS: 30000 // 30 seconds timeout for initial connection
-          // Removed keepAlive options that are not supported
-        };
-        
-        // Close existing connection if exists
-        if (mongoose.connection.readyState !== 0) {
-          console.log('🔄 Closing existing MongoDB connection before reconnecting...');
-          await mongoose.connection.close();
-        }
-        
-        await mongoose.connect(this.mongoUri, mongooseOptions);
+
+        // Safer connection management
+        await this.ensureSafeMongoConnection();
+
         console.log('✅ MongoDB connected successfully');
-        
+
         // Create store with explicit collection name to ensure proper creation
         const store = new MongoStore({
           mongoose: mongoose,
           collectionName: 'whatsapp-RemoteAuth-persistent-whatsapp-client'
         });
-        
+
         // Initialize RemoteAuth with more robust settings
         authStrategy = new RemoteAuth({
           store: store,
@@ -276,7 +422,7 @@ class PersistentWhatsAppClient {
           dataPath: this.sessionPath,
           rmMaxRetries: 10 // Increase max retries for remote auth
         });
-        
+
         console.log('✅ Using RemoteAuth with MongoDB for better session persistence');
       } catch (mongoError) {
         console.warn('⚠️ MongoDB connection failed, falling back to LocalAuth:', mongoError.message);
@@ -337,6 +483,134 @@ class PersistentWhatsAppClient {
 
     this.registerPersistentEventHandlers();
   }
+
+  /**
+   * Safely ensure MongoDB connection without forcing disconnections
+   */
+  async ensureSafeMongoConnection() {
+    const currentState = mongoose.connection.readyState;
+
+    console.log(`📊 Current MongoDB state: ${currentState} (0=disconnected, 1=connected, 2=connecting, 3=disconnecting)`);
+
+    switch (currentState) {
+      case 0: // Disconnected - safe to connect
+        console.log('🔄 MongoDB disconnected, establishing new connection...');
+        await this.connectToMongoDB();
+        break;
+
+      case 1: // Connected - reuse existing connection
+        console.log('✅ MongoDB already connected, reusing connection');
+        // Test the connection
+        try {
+          await mongoose.connection.db.admin().ping();
+          console.log('✅ MongoDB connection test passed');
+        } catch (pingError) {
+          console.warn('⚠️ MongoDB ping failed, reconnecting...', pingError.message);
+          await this.reconnectMongoDB();
+        }
+        break;
+
+      case 2: // Connecting - wait for completion
+        console.log('⏳ MongoDB connection in progress, waiting...');
+        await this.waitForMongoConnection();
+        break;
+
+      case 3: // Disconnecting - wait then reconnect
+        console.log('⏳ MongoDB disconnecting, waiting then reconnecting...');
+        await this.waitForMongoDisconnection();
+        await this.connectToMongoDB();
+        break;
+
+      default:
+        console.warn('⚠️ Unknown MongoDB state, attempting fresh connection...');
+        await this.reconnectMongoDB();
+    }
+  }
+
+  /**
+   * Connect to MongoDB with proper error handling
+   */
+  async connectToMongoDB() {
+    const mongooseOptions = {
+      serverSelectionTimeoutMS: 30000, // 30 seconds timeout for server selection
+      socketTimeoutMS: 120000, // 2 minutes timeout for socket operations
+      connectTimeoutMS: 60000, // 1 minute timeout for initial connection
+      keepAlive: true, // Enable keepAlive to prevent connection timeouts
+      keepAliveInitialDelay: 300000 // Send keepAlive packets every 5 minutes
+    };
+
+    await mongoose.connect(this.mongoUri, mongooseOptions);
+  }
+
+  /**
+   * Safely reconnect to MongoDB
+   */
+  async reconnectMongoDB() {
+    try {
+      // Only close if we're in a stable state
+      if (mongoose.connection.readyState === 1) {
+        console.log('🔄 Gracefully closing stable MongoDB connection...');
+        await mongoose.connection.close();
+      }
+
+      // Wait a moment before reconnecting
+      await new Promise(resolve => setTimeout(resolve, 2000));
+
+      await this.connectToMongoDB();
+    } catch (error) {
+      console.error('❌ MongoDB reconnection failed:', error.message);
+      throw error;
+    }
+  }
+
+  /**
+   * Wait for MongoDB connection to complete
+   */
+  async waitForMongoConnection() {
+    return new Promise((resolve, reject) => {
+      const timeout = setTimeout(() => {
+        mongoose.connection.removeAllListeners('connected');
+        mongoose.connection.removeAllListeners('error');
+        reject(new Error('MongoDB connection timeout'));
+      }, 30000);
+
+      mongoose.connection.once('connected', () => {
+        clearTimeout(timeout);
+        console.log('✅ MongoDB connection completed');
+        resolve();
+      });
+
+      mongoose.connection.once('error', (error) => {
+        clearTimeout(timeout);
+        reject(error);
+      });
+    });
+  }
+
+  /**
+   * Wait for MongoDB disconnection to complete
+   */
+  async waitForMongoDisconnection() {
+    return new Promise((resolve) => {
+      const timeout = setTimeout(() => {
+        console.log('⚠️ MongoDB disconnection timeout, proceeding anyway');
+        resolve();
+      }, 10000);
+
+      mongoose.connection.once('disconnected', () => {
+        clearTimeout(timeout);
+        console.log('✅ MongoDB disconnection completed');
+        resolve();
+      });
+
+      // If already disconnected, resolve immediately
+      if (mongoose.connection.readyState === 0) {
+        clearTimeout(timeout);
+        resolve();
+      }
+    });
+  }
+
   // -----------------------BACKUP KI STRATEGY YHNI PE LGA DIJIYE------------------------------------------
 
   /**
@@ -739,6 +1013,50 @@ class PersistentWhatsAppClient {
 
     console.log(`⏱️ Connection check interval set to ${this.heartbeatInterval / 1000}s`);
 
+    // Add MongoDB connection monitoring to prevent timeouts
+    this.mongoDbMonitorInterval = 30 * 60 * 1000; // Check MongoDB every 30 minutes
+    console.log(`📊 MongoDB connection monitoring interval: ${this.mongoDbMonitorInterval / 60000} minutes`);
+    
+    // Start MongoDB connection monitoring
+    this.mongoDbMonitor = setInterval(async () => {
+      try {
+        if (this.useRemoteAuth && mongoose.connection) {
+          // Check MongoDB connection state
+          const state = mongoose.connection.readyState;
+          console.log(`📊 MongoDB connection state: ${state} (0=disconnected, 1=connected, 2=connecting, 3=disconnecting)`);
+          
+          if (state !== 1) { // Not connected
+            console.log('⚠️ MongoDB connection lost, attempting to reconnect...');
+            // Reconnect with the same options used in createNewClient
+            const mongooseOptions = {
+              serverSelectionTimeoutMS: 30000,
+              socketTimeoutMS: 120000,
+              connectTimeoutMS: 60000,
+              keepAlive: true,
+              keepAliveInitialDelay: 300000
+            };
+            
+            // Close existing connection if exists
+            if (mongoose.connection.readyState !== 0) {
+              console.log('🔄 Closing existing MongoDB connection before reconnecting...');
+              await mongoose.connection.close();
+            }
+            
+            await mongoose.connect(this.mongoUri, mongooseOptions);
+            console.log('✅ MongoDB reconnected successfully');
+          } else {
+            // Even if connected, ping the database to keep the connection alive
+            console.log('🔄 Pinging MongoDB to keep connection alive...');
+            await mongoose.connection.db.admin().ping();
+            console.log('✅ MongoDB ping successful');
+          }
+        }
+      } catch (error) {
+        console.error('❌ MongoDB connection check failed:', error.message);
+        // Try to reconnect on next interval
+      }
+    }, this.mongoDbMonitorInterval);
+
     this.connectionMonitor = setInterval(async () => {
       // Add random jitter to prevent synchronized failures
       const jitter = Math.floor(Math.random() * 5000); // 0-5 seconds jitter
@@ -800,6 +1118,12 @@ class PersistentWhatsAppClient {
       clearInterval(this.groupRefreshInterval);
       this.groupRefreshInterval = null;
       console.log('🛑 Group refresh stopped');
+    }
+    
+    if (this.mongoDbMonitor) {
+      clearInterval(this.mongoDbMonitor);
+      this.mongoDbMonitor = null;
+      console.log('🛑 MongoDB connection monitoring stopped');
     }
 
     // Don't clear lock refresh interval here - it should persist until process exit

@@ -133,7 +133,7 @@ class WhatsAppGroupCapture {
    */
   async shutdown() {
     try {
-      console.log('Shutting down application...');
+      console.log('🛑 Shutting down application...');
 
       const activeTimers = setTimeout(() => {}, 0);
       for (let i = 0; i < activeTimers; i++) {
@@ -144,9 +144,9 @@ class WhatsAppGroupCapture {
       if (this.server && typeof this.server.stop === 'function') {
         try {
           await this.server.stop();
-          console.log('Web server stopped');
+          console.log('✅ Web server stopped');
         } catch (serverError) {
-          console.error('Error stopping web server:', serverError);
+          console.error('❌ Error stopping web server:', serverError);
         }
       }
       
@@ -154,9 +154,9 @@ class WhatsAppGroupCapture {
       if (this.whatsappClient) {
         try {
           await this.whatsappClient.shutdown();
-          console.log('WhatsApp client stopped');
+          console.log('✅ WhatsApp client stopped');
         } catch (clientError) {
-          console.error('Error stopping WhatsApp client:', clientError);
+          console.error('❌ Error stopping WhatsApp client:', clientError);
         }
       }
       
@@ -164,16 +164,16 @@ class WhatsAppGroupCapture {
       if (this.dbService) {
         try {
           await this.dbService.disconnect();
-          console.log('Database disconnected');
+          console.log('✅ Database disconnected');
         } catch (dbError) {
-          console.error('Error disconnecting from database:', dbError);
+          console.error('❌ Error disconnecting from database:', dbError);
         }
       }
       
-      console.log('Application shutdown complete');
+      console.log('👋 Application shutdown complete');
       process.exit(0);
     } catch (error) {
-      console.error('Error during shutdown:', error);
+      console.error('❌ Error during shutdown:', error);
       process.exit(1);
     }
   }
@@ -212,7 +212,51 @@ async function main() {
   
   // Expose services globally for API access
   global.app.documentViewerService = app.documentViewerService;
+  
+  // Register signal handlers for graceful shutdown
+  process.on('SIGINT', async () => {
+    console.log('\n🛑 Received SIGINT signal');
+    await app.shutdown();
+  });
+  
+  process.on('SIGTERM', async () => {
+    console.log('\n🛑 Received SIGTERM signal');
+    await app.shutdown();
+  });
+  
   await app.start(!backendOnly); // Pass false to disable web server in backend-only mode
+  
+  // Add graceful shutdown handler for MongoDB connections
+  process.on('uncaughtException', (error) => {
+    console.error('Uncaught exception:', error);
+    gracefulShutdown();
+  });
+}
+
+// Additional graceful shutdown function for MongoDB connections
+async function gracefulShutdown() {
+  console.log('🛑 Graceful shutdown initiated...');
+  try {
+    // Close MongoDB connections if they exist
+    const mongoose = require('mongoose');
+    if (mongoose.connection && mongoose.connection.readyState !== 0) {
+      console.log('🔄 Closing MongoDB connections...');
+      await mongoose.connection.close();
+      console.log('✅ MongoDB connections closed');
+    }
+    
+    // Other cleanup tasks can be added here
+    
+    if (global.app) {
+      await global.app.shutdown();
+    } else {
+      console.log('👋 Application shutdown complete');
+      process.exit(0);
+    }
+  } catch (error) {
+    console.error('❌ Error during graceful shutdown:', error);
+    process.exit(1);
+  }
 }
 
 main().catch(error => {

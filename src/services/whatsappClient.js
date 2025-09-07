@@ -50,6 +50,19 @@ class PersistentWhatsAppClient {
     this.currentQRCode = null;
     this.qrCodeBase64 = null;
     this.lastQRCodeTime = null;
+
+    // Memory management and periodic restart settings
+    this.periodicRestartTimer = null;
+    this.periodicRestartInterval = 6 * 60 * 60 * 1000; // 6 hours in milliseconds
+    this.memoryThreshold = 90; // Restart when heap usage exceeds 90%
+    this.lastRestartTime = new Date();
+    this.restartCount = 0;
+    
+    // Session synchronization flags to prevent corruption during restarts
+    this.isSessionSaving = false;
+    this.sessionSaveQueue = [];
+    this.restartPending = false;
+    this.sessionOperationTimeout = 30000; // 30 seconds timeout for session operations
   }
 
   /**
@@ -391,6 +404,7 @@ class PersistentWhatsAppClient {
       maxIdleTimeMS: 30000,
       waitQueueTimeoutMS: 5000,
       heartbeatFrequencyMS: 10000
+      
     };
 
     try {
@@ -647,10 +661,11 @@ class PersistentWhatsAppClient {
 
       this.reconnectAttempts = 0;
 
-      // Ensure RemoteAuth session is saved if using MongoDB
+      // Ensure RemoteAuth session is saved if using MongoDB with synchronization
       if (this.useRemoteAuth && mongoose.connection.readyState === 1) {
         try {
           console.log('💾 Ensuring RemoteAuth session is properly saved...');
+          this.isSessionSaving = true; // Set flag to prevent restart during save
 
           if (this.client.authStrategy && typeof this.client.authStrategy.save === 'function') {
             await this.client.authStrategy.save();
@@ -664,10 +679,23 @@ class PersistentWhatsAppClient {
           }
         } catch (saveError) {
           console.error('⚠️ Error ensuring session persistence:', saveError.message);
+        } finally {
+          this.isSessionSaving = false; // Clear flag after save completes
+          
+          // If restart was pending during session save, trigger it now
+          if (this.restartPending) {
+            console.log('🔄 Executing pending restart after session save completion');
+            this.restartPending = false;
+            setImmediate(() => this.gracefulRestart('PENDING_AFTER_SESSION_SAVE'));
+          }
         }
       }
 
       this.startConnectionMonitoring();
+      
+      // Start periodic restart timer for memory management
+      console.log(`⏰ Starting periodic restart timer (${this.periodicRestartInterval / (1000 * 60 * 60)} hours)`);
+      this.startPeriodicRestartTimer();
 
       // Initialize groups with retry strategy
       console.log('⏳ Waiting for WhatsApp Web to fully synchronize...');
@@ -967,6 +995,37 @@ class PersistentWhatsAppClient {
           const heapPercentage = Math.round((heapUsedMB / heapTotalMB) * 100);
           console.log(`📊 Memory usage: ${heapUsedMB}MB / ${heapTotalMB}MB (${heapPercentage}%)`);
 
+          // Check for critical memory usage requiring restart
+          if (heapPercentage >= this.memoryThreshold) {
+            console.log(`🚨 Critical memory usage detected: ${heapPercentage}% (threshold: ${this.memoryThreshold}%)`);
+            
+            // Check if session save is in progress - defer restart to prevent corruption
+            if (this.isSessionSaving) {
+              console.log('⏳ Session save in progress - deferring restart to prevent corruption');
+              this.restartPending = true;
+              
+              // Set timeout to force restart if session save takes too long
+              setTimeout(() => {
+                if (this.restartPending && this.isSessionSaving) {
+                  console.log('⚠️ Session save timeout - forcing restart to prevent memory overflow');
+                  this.isSessionSaving = false;
+                  this.restartPending = false;
+                  this.gracefulRestart('MEMORY_THRESHOLD_FORCED');
+                }
+              }, this.sessionOperationTimeout);
+              return;
+            }
+            
+            console.log('🔄 Triggering graceful restart to prevent memory overflow...');
+            
+            // Trigger graceful restart in next tick to avoid blocking current check
+            setImmediate(() => {
+              this.gracefulRestart('MEMORY_THRESHOLD');
+            });
+            return;
+          }
+          
+          // High memory warning and garbage collection
           if (heapPercentage > 85) {
             console.log('⚠️ High memory usage detected, suggesting garbage collection');
             if (global.gc) {
@@ -1331,6 +1390,9 @@ class PersistentWhatsAppClient {
    * Initialize groups
    */
   async initializeGroups(attempt = 1, maxAttempts = 10) {
+    // Set session operation flag to prevent restart corruption
+    this.isSessionSaving = true;
+    
     try {
       console.log(`📋 Initializing groups for large-scale operation (attempt ${attempt})...`);
 
@@ -1454,6 +1516,18 @@ class PersistentWhatsAppClient {
       }
 
       return [];
+    } finally {
+      // Clear session operation flag
+      this.isSessionSaving = false;
+      
+      // Execute pending restart if needed
+      if (this.restartPending) {
+        console.log('🔄 Executing pending restart after group initialization completion');
+        this.restartPending = false;
+        setImmediate(() => {
+          this.gracefulRestart('MEMORY_THRESHOLD_DEFERRED');
+        });
+      }
     }
   }
 
@@ -1721,9 +1795,158 @@ class PersistentWhatsAppClient {
     }, 2000);
   }
 
+  /**
+   * Graceful restart that preserves RemoteAuth session
+   */
+  async gracefulRestart(reason = 'SCHEDULED') {
+    console.log(`🔄 Initiating graceful restart - Reason: ${reason}`);
+    console.log(`📊 Restart #${this.restartCount + 1} - Last restart: ${this.lastRestartTime.toLocaleString()}`);
+    
+    // Wait for any ongoing session operations to complete (Node.js single-threaded safety)
+    if (this.isSessionSaving) {
+      console.log('⏳ Waiting for ongoing session save to complete before restart...');
+      const startWait = Date.now();
+      
+      // Wait for session save to complete or timeout
+      while (this.isSessionSaving && (Date.now() - startWait) < this.sessionOperationTimeout) {
+        await new Promise(resolve => setTimeout(resolve, 100)); // Check every 100ms
+      }
+      
+      if (this.isSessionSaving) {
+        console.log('⚠️ Session save timeout during restart - proceeding with caution');
+        this.isSessionSaving = false; // Force clear to prevent deadlock
+      } else {
+        console.log('✅ Session save completed - proceeding with restart');
+      }
+    }
+    
+    // Clear any pending restart flag since we're executing now
+    this.restartPending = false;
+    
+    // Log memory stats before restart
+    const memoryUsage = process.memoryUsage();
+    const heapUsedMB = Math.round(memoryUsage.heapUsed / 1024 / 1024);
+    const heapTotalMB = Math.round(memoryUsage.heapTotal / 1024 / 1024);
+    const heapPercentage = Math.round((heapUsedMB / heapTotalMB) * 100);
+    console.log(`📊 Pre-restart memory: ${heapUsedMB}MB / ${heapTotalMB}MB (${heapPercentage}%)`);
+    
+    try {
+      // Stop monitoring and timers
+      this.stopConnectionMonitoring();
+      if (this.periodicRestartTimer) {
+        clearTimeout(this.periodicRestartTimer);
+        this.periodicRestartTimer = null;
+      }
+      
+      // Gracefully destroy current client (preserves RemoteAuth session)
+      if (this.client) {
+        console.log('🛑 Destroying current client...');
+        await this.client.destroy();
+        this.client = null;
+      }
+      
+      // Reset state
+      this.isClientReady = false;
+      this.isAuthenticated = false;
+      this.reconnectAttempts = 0;
+      
+      // Force garbage collection if available
+      if (global.gc) {
+        console.log('🧹 Running garbage collection...');
+        global.gc();
+      }
+      
+      // Update restart tracking
+      this.restartCount++;
+      this.lastRestartTime = new Date();
+      
+      // Wait a moment for cleanup
+      await new Promise(resolve => setTimeout(resolve, 2000));
+      
+      // Initialize new client (RemoteAuth will auto-login)
+      console.log('🚀 Starting new client instance...');
+      await this.initializeClient(false); // Don't force new session - use RemoteAuth
+      
+      // Start periodic restart timer
+      this.startPeriodicRestartTimer();
+      
+      console.log('✅ Graceful restart completed successfully');
+      
+    } catch (error) {
+      console.error('❌ Error during graceful restart:', error.message);
+      // Fallback to regular initialization
+      setTimeout(() => {
+        console.log('🔄 Attempting fallback initialization...');
+        this.initializeClient(false);
+      }, 5000);
+    }
+  }
+
+  /**
+   * Start periodic restart timer
+   */
+  startPeriodicRestartTimer() {
+    if (this.periodicRestartTimer) {
+      clearTimeout(this.periodicRestartTimer);
+    }
+    
+    const nextRestartTime = new Date(Date.now() + this.periodicRestartInterval);
+    console.log(`⏰ Periodic restart scheduled in ${this.periodicRestartInterval / (60 * 60 * 1000)} hours`);
+    console.log(`📅 Next restart time: ${nextRestartTime.toLocaleString()}`);
+    console.log(`📊 Current restart count: ${this.restartCount}`);
+    console.log(`🕐 Last restart: ${this.lastRestartTime.toLocaleString()}`);
+    
+    this.periodicRestartTimer = setTimeout(() => {
+      console.log('⏰ Periodic restart timer triggered');
+      
+      // Check if session save is in progress - defer restart to prevent corruption
+      if (this.isSessionSaving) {
+        console.log('⏳ Session save in progress - deferring periodic restart');
+        this.restartPending = true;
+        // The restart will be triggered automatically when session save completes
+        return;
+      }
+      
+      this.gracefulRestart('PERIODIC');
+    }, this.periodicRestartInterval);
+  }
+
+  /**
+   * Stop periodic restart timer
+   */
+  stopPeriodicRestartTimer() {
+    if (this.periodicRestartTimer) {
+      clearTimeout(this.periodicRestartTimer);
+      this.periodicRestartTimer = null;
+      console.log('⏰ Periodic restart timer stopped');
+    }
+  }
+
   async shutdown() {
     console.log('🛑 Shutting down Persistent WhatsApp Client...');
+    
+    // Wait for any ongoing session operations to complete before shutdown
+    if (this.isSessionSaving) {
+      console.log('⏳ Waiting for ongoing session save to complete before shutdown...');
+      const startWait = Date.now();
+      
+      while (this.isSessionSaving && (Date.now() - startWait) < this.sessionOperationTimeout) {
+        await new Promise(resolve => setTimeout(resolve, 100));
+      }
+      
+      if (this.isSessionSaving) {
+        console.log('⚠️ Session save timeout during shutdown - proceeding with shutdown');
+        this.isSessionSaving = false;
+      } else {
+        console.log('✅ Session save completed - proceeding with shutdown');
+      }
+    }
+    
+    // Clear any pending restart flags
+    this.restartPending = false;
+    
     this.stopConnectionMonitoring();
+    this.stopPeriodicRestartTimer();
 
     if (this.lockRefreshInterval) {
       clearInterval(this.lockRefreshInterval);

@@ -856,7 +856,7 @@ class PersistentWhatsAppClient {
     this.stopConnectionMonitoring();
 
     console.log('🔍 Starting connection monitoring...');
-    this.heartbeatInterval = Math.max(this.heartbeatInterval, 60000);
+    this.heartbeatInterval = Math.max(this.heartbeatInterval, 2 * 60 * 1000); // Changed from 1 minute to 2 minutes for low-resource systems
     console.log(`⏱️ Connection check interval set to ${this.heartbeatInterval / 1000}s`);
 
     // MongoDB connection monitoring
@@ -1070,7 +1070,7 @@ class PersistentWhatsAppClient {
                   console.log('🔄 Performing scheduled group refresh to find missing groups');
                   this.initializeGroups();
                   this.partialGroupRefreshScheduled = false;
-                }, 60000);
+                }, 5 * 60 * 1000); // Changed from 1 minute to 5 minutes to reduce VM stress
               }
             }
           } catch (groupError) {
@@ -1471,7 +1471,7 @@ class PersistentWhatsAppClient {
             console.log('🔄 Performing scheduled group refresh to find missing groups');
             this.initializeGroups();
             this.partialGroupRefreshScheduled = false;
-          }, 60000);
+          }, 5 * 60 * 1000); // Changed from 1 minute to 5 minutes to reduce VM stress
         }
       } else if (groups.length >= 400) {
         console.log('🎉 All expected groups loaded successfully!');
@@ -1508,11 +1508,11 @@ class PersistentWhatsAppClient {
       console.log('📝 The application will continue running and retry group initialization periodically');
 
       if (!this.groupRefreshInterval) {
-        console.log('🔄 Setting up periodic group refresh every 5 minutes');
+        console.log('🔄 Setting up periodic group refresh every 10 minutes');
         this.groupRefreshInterval = setInterval(() => {
           console.log('🔄 Attempting periodic group initialization...');
           this.initializeGroups(1, 5);
-        }, 5 * 60 * 1000);
+        }, 10 * 60 * 1000); // Changed from 5 minutes to 10 minutes to reduce VM stress
       }
 
       return [];

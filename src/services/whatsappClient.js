@@ -54,6 +54,23 @@ class PersistentWhatsAppClient {
     // Memory management and periodic restart settings
     this.periodicRestartTimer = null;
     this.periodicRestartInterval = 6 * 60 * 60 * 1000; // 6 hours in milliseconds
+    
+    // Cache maintenance timer
+    this.cacheMaintenanceTimer = null;
+    this.cacheMaintenanceInterval = 5 * 24 * 60 * 60 * 1000; // 5 days
+    this.lastCacheCleanup = Date.now();
+    
+    // Cache monitoring
+    this.cacheMonitoringTimer = null;
+    this.cacheMonitoringInterval = 2 * 60 * 60 * 1000; // 2 hours
+    this.cacheWarningThreshold = 100; // MB
+    this.cacheCriticalThreshold = 200; // MB
+    
+    // Disk space monitoring
+    this.diskSpaceMonitoringTimer = null;
+    this.diskSpaceMonitoringInterval = 4 * 60 * 60 * 1000; // 4 hours
+    this.diskSpaceWarningThreshold = 1024; // MB (1GB)
+    this.diskSpaceCriticalThreshold = 512; // MB (512MB)
     this.memoryThreshold = 90; // Restart when heap usage exceeds 90%
     this.lastRestartTime = new Date();
     this.restartCount = 0;
@@ -696,6 +713,24 @@ class PersistentWhatsAppClient {
       // Start periodic restart timer for memory management
       console.log(`⏰ Starting periodic restart timer (${this.periodicRestartInterval / (1000 * 60 * 60)} hours)`);
       this.startPeriodicRestartTimer();
+      
+      // Start cache maintenance timer for long-term stability
+      console.log(`🧹 Starting cache maintenance timer (${this.cacheMaintenanceInterval / (24 * 60 * 60 * 1000)} days)`);
+      this.startCacheMaintenanceTimer();
+      
+      // Start cache monitoring for proactive alerts
+      this.startCacheMonitoring();
+      
+      // Start disk space monitoring for system health
+      this.startDiskSpaceMonitoring();
+      
+      // Validate session integrity before proceeding
+      const validationResult = await this.validateSessionIntegrity();
+      if (!validationResult.valid && validationResult.cleaned) {
+        console.log('🔄 Session was cleaned due to corruption, proceeding with fresh start...');
+      } else if (!validationResult.valid) {
+        console.warn('⚠️ Session validation found issues but no cleanup was needed');
+      }
 
       // Initialize groups with retry strategy
       console.log('⏳ Waiting for WhatsApp Web to fully synchronize...');
@@ -1308,6 +1343,22 @@ class PersistentWhatsAppClient {
       console.error('🚨 Critical browser error:', error.message);
       console.log('💡 Suggestion: Please check Chrome/Chromium installation');
       additionalDelay = 10000;
+    } else if (errorMessage.includes('z_buf_error') ||
+        errorMessage.includes('unexpected end of file') ||
+        errorMessage.includes('corrupt') ||
+        errorMessage.includes('buffer') && errorMessage.includes('error')) {
+      console.error('🚨 Z_BUF_ERROR or cache corruption detected:', error.message);
+      console.log('🧹 Triggering cache cleanup to resolve corruption...');
+      shouldClearSession = true;
+      additionalDelay = 12000; // Extra time for cache cleanup
+      
+      // Immediately clean cache to prevent further corruption
+      try {
+        await this.cleanBrowserCache();
+        console.log('✅ Emergency cache cleanup completed');
+      } catch (cleanupError) {
+        console.error('⚠️ Emergency cache cleanup failed:', cleanupError.message);
+      }
     }
 
     // Auto-restart is now disabled - maxReconnectAttempts is set to 0
@@ -1759,6 +1810,87 @@ class PersistentWhatsAppClient {
     }
   }
 
+  /**
+   * Clean browser cache to prevent Z_BUF_ERROR corruption
+   */
+  async cleanBrowserCache() {
+    try {
+      const cacheDir = path.join(process.cwd(), '.wwebjs_cache');
+      
+      if (fs.existsSync(cacheDir)) {
+        console.log('🧹 Cleaning browser cache to prevent corruption...');
+        
+        // Get cache size before cleanup
+        const stats = await this.getCacheStats(cacheDir);
+        console.log(`📊 Cache size before cleanup: ${stats.sizeMB}MB (${stats.fileCount} files)`);
+        
+        // Remove cache directory
+        fs.rmSync(cacheDir, { recursive: true, force: true });
+        console.log('✅ Browser cache cleaned successfully');
+        
+        // Log cleanup for monitoring
+        this.logCacheCleanup(stats);
+      } else {
+        console.log('ℹ️ No browser cache found to clean');
+      }
+    } catch (error) {
+      console.error('⚠️ Error cleaning browser cache:', error.message);
+      // Don't throw - cache cleanup failure shouldn't stop restart
+    }
+  }
+
+  /**
+   * Get cache directory statistics
+   */
+  async getCacheStats(cacheDir) {
+    try {
+      let totalSize = 0;
+      let fileCount = 0;
+      
+      const files = fs.readdirSync(cacheDir, { recursive: true });
+      
+      for (const file of files) {
+        const filePath = path.join(cacheDir, file);
+        try {
+          const stat = fs.statSync(filePath);
+          if (stat.isFile()) {
+            totalSize += stat.size;
+            fileCount++;
+          }
+        } catch (err) {
+          // Skip files that can't be accessed
+        }
+      }
+      
+      return {
+        sizeMB: Math.round(totalSize / (1024 * 1024) * 100) / 100,
+        fileCount: fileCount
+      };
+    } catch (error) {
+      return { sizeMB: 0, fileCount: 0 };
+    }
+  }
+
+  /**
+   * Log cache cleanup for monitoring
+   */
+  logCacheCleanup(stats, rotationResult = null) {
+    const logEntry = {
+      timestamp: new Date().toISOString(),
+      event: 'CACHE_CLEANUP',
+      sizeMB: stats.sizeMB,
+      fileCount: stats.fileCount,
+      restartCount: this.restartCount,
+      rotation: rotationResult ? {
+        filesRotated: rotationResult.filesRotated || 0,
+        sizeFreedMB: rotationResult.sizeFreedMB || 0,
+        rotated: rotationResult.rotated || false
+      } : null
+    };
+    
+    console.log('📝 Cache cleanup logged:', JSON.stringify(logEntry));
+  }
+
   async forceGroupInitialization() {
     console.log('🔄 Manually triggering group initialization...');
 
@@ -1844,7 +1976,10 @@ class PersistentWhatsAppClient {
         await this.client.destroy();
         this.client = null;
       }
-      
+
+      // Clean browser cache to prevent Z_BUF_ERROR corruption
+      await this.cleanBrowserCache();
+
       // Reset state
       this.isClientReady = false;
       this.isAuthenticated = false;
@@ -1922,6 +2057,528 @@ class PersistentWhatsAppClient {
     }
   }
 
+  /**
+   * Start cache maintenance timer for periodic cleanup
+   */
+  startCacheMaintenanceTimer() {
+    if (this.cacheMaintenanceTimer) {
+      clearTimeout(this.cacheMaintenanceTimer);
+    }
+
+    const nextMaintenanceTime = new Date(Date.now() + this.cacheMaintenanceInterval);
+    console.log(`🧹 Cache maintenance scheduled in ${this.cacheMaintenanceInterval / (24 * 60 * 60 * 1000)} days`);
+    console.log(`📅 Next cache cleanup: ${nextMaintenanceTime.toLocaleString()}`);
+    
+    this.cacheMaintenanceTimer = setTimeout(async () => {
+      console.log('🧹 Cache maintenance timer triggered');
+      try {
+        await this.performCacheMaintenance();
+        console.log('✅ Cache maintenance completed successfully');
+        // Restart the timer for next maintenance
+        this.startCacheMaintenanceTimer();
+      } catch (error) {
+        console.error('❌ Cache maintenance failed:', error);
+        // Still restart the timer even if maintenance failed
+        this.startCacheMaintenanceTimer();
+      }
+    }, this.cacheMaintenanceInterval);
+  }
+
+  /**
+   * Stop cache maintenance timer
+   */
+  stopCacheMaintenanceTimer() {
+    if (this.cacheMaintenanceTimer) {
+      clearTimeout(this.cacheMaintenanceTimer);
+      this.cacheMaintenanceTimer = null;
+      console.log('🧹 Cache maintenance timer stopped');
+    }
+  }
+
+  /**
+   * Perform cache maintenance without restarting the client
+   */
+  async performCacheMaintenance() {
+    try {
+      const cacheDir = path.join(process.cwd(), '.wwebjs_cache');
+      
+      if (fs.existsSync(cacheDir)) {
+        const stats = await this.getCacheStats(cacheDir);
+        
+        // Only clean if cache is larger than 50MB or has been 5+ days since last cleanup
+        const daysSinceLastCleanup = (Date.now() - this.lastCacheCleanup) / (24 * 60 * 60 * 1000);
+        
+        if (stats.sizeMB > 50 || daysSinceLastCleanup >= 5) {
+          console.log(`🧹 Performing cache maintenance - Size: ${stats.sizeMB}MB, Days since last cleanup: ${Math.round(daysSinceLastCleanup)}`);
+          
+          // Perform cache rotation first to preserve some data
+          const rotationResult = await this.rotateCacheFiles();
+          if (rotationResult.rotated) {
+            console.log(`🔄 Cache rotation completed: ${rotationResult.filesRotated} files rotated, ${rotationResult.sizeFreedMB}MB freed`);
+          }
+          
+          // Clean remaining cache
+          fs.rmSync(cacheDir, { recursive: true, force: true });
+          this.lastCacheCleanup = Date.now();
+          
+          this.logCacheCleanup(stats, rotationResult);
+          console.log('✅ Cache maintenance completed');
+        } else {
+          console.log(`ℹ️ Cache maintenance skipped - Size: ${stats.sizeMB}MB (threshold: 50MB), Days: ${Math.round(daysSinceLastCleanup)} (threshold: 5)`);
+        }
+      } else {
+        console.log('ℹ️ No cache directory found during maintenance');
+      }
+    } catch (error) {
+      console.error('⚠️ Error during cache maintenance:', error.message);
+      throw error;
+    }
+  }
+
+  /**
+   * Start cache monitoring timer
+   */
+  startCacheMonitoring() {
+    if (this.cacheMonitoringTimer) {
+      clearTimeout(this.cacheMonitoringTimer);
+    }
+
+    console.log(`📊 Starting cache monitoring (every ${this.cacheMonitoringInterval / (60 * 60 * 1000)} hours)`);
+    
+    this.cacheMonitoringTimer = setTimeout(async () => {
+      try {
+        await this.monitorCacheSize();
+        // Restart the timer for next monitoring
+        this.startCacheMonitoring();
+      } catch (error) {
+        console.error('❌ Cache monitoring failed:', error);
+        // Still restart the timer even if monitoring failed
+        this.startCacheMonitoring();
+      }
+    }, this.cacheMonitoringInterval);
+  }
+
+  /**
+   * Stop cache monitoring timer
+   */
+  stopCacheMonitoring() {
+    if (this.cacheMonitoringTimer) {
+      clearTimeout(this.cacheMonitoringTimer);
+      this.cacheMonitoringTimer = null;
+      console.log('📊 Cache monitoring stopped');
+    }
+  }
+
+  /**
+   * Monitor cache size and alert if thresholds are exceeded
+   */
+  async monitorCacheSize() {
+    try {
+      const cacheDir = path.join(process.cwd(), '.wwebjs_cache');
+      
+      if (fs.existsSync(cacheDir)) {
+        const stats = await this.getCacheStats(cacheDir);
+        
+        console.log(`📊 Cache monitoring - Size: ${stats.sizeMB}MB, Files: ${stats.fileCount}`);
+        
+        if (stats.sizeMB >= this.cacheCriticalThreshold) {
+          console.error(`🚨 CRITICAL: Cache size ${stats.sizeMB}MB exceeds critical threshold ${this.cacheCriticalThreshold}MB`);
+          console.log('🧹 Triggering emergency cache cleanup...');
+          
+          // Trigger emergency cleanup
+          await this.cleanBrowserCache();
+          console.log('✅ Emergency cache cleanup completed');
+          
+        } else if (stats.sizeMB >= this.cacheWarningThreshold) {
+          console.warn(`⚠️ WARNING: Cache size ${stats.sizeMB}MB exceeds warning threshold ${this.cacheWarningThreshold}MB`);
+          console.log('💡 Consider manual cache cleanup or wait for scheduled maintenance');
+        }
+        
+        // Log monitoring data for analysis
+        this.logCacheMonitoring(stats);
+        
+      } else {
+        console.log('📊 Cache monitoring - No cache directory found');
+      }
+    } catch (error) {
+      console.error('⚠️ Error during cache monitoring:', error.message);
+    }
+  }
+
+  /**
+   * Log cache monitoring data
+   */
+  logCacheMonitoring(stats) {
+    const logEntry = {
+      timestamp: new Date().toISOString(),
+      event: 'CACHE_MONITORING',
+      sizeMB: stats.sizeMB,
+      fileCount: stats.fileCount,
+      warningThreshold: this.cacheWarningThreshold,
+      criticalThreshold: this.cacheCriticalThreshold,
+      status: stats.sizeMB >= this.cacheCriticalThreshold ? 'CRITICAL' : 
+              stats.sizeMB >= this.cacheWarningThreshold ? 'WARNING' : 'OK'
+    };
+    
+    console.log('📝 Cache monitoring logged:', JSON.stringify(logEntry));
+  }
+
+  /**
+   * Start disk space monitoring timer
+   */
+  startDiskSpaceMonitoring() {
+    if (this.diskSpaceMonitoringTimer) {
+      clearTimeout(this.diskSpaceMonitoringTimer);
+    }
+
+    console.log(`💾 Starting disk space monitoring (every ${this.diskSpaceMonitoringInterval / (60 * 60 * 1000)} hours)`);
+    
+    this.diskSpaceMonitoringTimer = setTimeout(async () => {
+      try {
+        await this.monitorDiskSpace();
+        // Restart the timer for next monitoring
+        this.startDiskSpaceMonitoring();
+      } catch (error) {
+        console.error('❌ Disk space monitoring failed:', error);
+        // Still restart the timer even if monitoring failed
+        this.startDiskSpaceMonitoring();
+      }
+    }, this.diskSpaceMonitoringInterval);
+  }
+
+  /**
+   * Stop disk space monitoring timer
+   */
+  stopDiskSpaceMonitoring() {
+    if (this.diskSpaceMonitoringTimer) {
+      clearTimeout(this.diskSpaceMonitoringTimer);
+      this.diskSpaceMonitoringTimer = null;
+      console.log('💾 Disk space monitoring stopped');
+    }
+  }
+
+  /**
+   * Monitor disk space and trigger cleanup if thresholds are exceeded
+   */
+  async monitorDiskSpace() {
+    try {
+      const diskStats = await this.getDiskSpaceStats();
+      
+      console.log(`💾 Disk space monitoring - Available: ${diskStats.availableMB}MB (${diskStats.availablePercent}%)`);
+      
+      if (diskStats.availableMB <= this.diskSpaceCriticalThreshold) {
+        console.error(`🚨 CRITICAL: Available disk space ${diskStats.availableMB}MB is below critical threshold ${this.diskSpaceCriticalThreshold}MB`);
+        console.log('🧹 Triggering emergency cache and session cleanup...');
+        
+        // Emergency cleanup sequence
+        await this.cleanBrowserCache();
+        await this.cleanupOldBackups();
+        console.log('✅ Emergency disk space cleanup completed');
+        
+      } else if (diskStats.availableMB <= this.diskSpaceWarningThreshold) {
+        console.warn(`⚠️ WARNING: Available disk space ${diskStats.availableMB}MB is below warning threshold ${this.diskSpaceWarningThreshold}MB`);
+        console.log('💡 Consider manual cleanup or system maintenance');
+      }
+      
+      // Log monitoring data for analysis
+      this.logDiskSpaceMonitoring(diskStats);
+      
+    } catch (error) {
+      console.error('⚠️ Error during disk space monitoring:', error.message);
+    }
+  }
+
+  /**
+   * Get disk space statistics
+   */
+  async getDiskSpaceStats() {
+    try {
+      const stats = fs.statSync(process.cwd());
+      const statvfs = fs.statSync(process.cwd());
+      
+      // Use os.freemem() and os.totalmem() as approximation for disk space
+      // Note: This is a simplified approach. For production, consider using a proper disk space library
+      const totalMB = Math.round(os.totalmem() / (1024 * 1024));
+      const freeMB = Math.round(os.freemem() / (1024 * 1024));
+      const availableMB = freeMB; // Simplified - in reality, available space may be different
+      const availablePercent = Math.round((availableMB / totalMB) * 100);
+      
+      return {
+        totalMB,
+        availableMB,
+        availablePercent
+      };
+    } catch (error) {
+      console.error('Error getting disk space stats:', error);
+      // Return safe defaults if we can't get real stats
+      return {
+        totalMB: 8192, // 8GB default
+        availableMB: 2048, // 2GB default
+        availablePercent: 25
+      };
+    }
+  }
+
+  /**
+   * Log disk space monitoring data
+   */
+  logDiskSpaceMonitoring(stats) {
+    const logEntry = {
+      timestamp: new Date().toISOString(),
+      event: 'DISK_SPACE_MONITORING',
+      availableMB: stats.availableMB,
+      availablePercent: stats.availablePercent,
+      warningThreshold: this.diskSpaceWarningThreshold,
+      criticalThreshold: this.diskSpaceCriticalThreshold,
+      status: stats.availableMB <= this.diskSpaceCriticalThreshold ? 'CRITICAL' : 
+              stats.availableMB <= this.diskSpaceWarningThreshold ? 'WARNING' : 'OK'
+    };
+    
+    console.log('📝 Disk space monitoring logged:', JSON.stringify(logEntry));
+  }
+
+  /**
+   * Validate session integrity before startup
+   */
+  async validateSessionIntegrity() {
+    try {
+      console.log('🔍 Validating session integrity...');
+      
+      const sessionPath = this.sessionPath;
+      const cacheDir = path.join(process.cwd(), '.wwebjs_cache');
+      
+      let issues = [];
+      
+      // Check if session directory exists and is accessible
+      if (fs.existsSync(sessionPath)) {
+        try {
+          const sessionStats = fs.statSync(sessionPath);
+          if (!sessionStats.isDirectory()) {
+            issues.push('Session path exists but is not a directory');
+          }
+        } catch (error) {
+          issues.push(`Cannot access session directory: ${error.message}`);
+        }
+      }
+      
+      // Check cache directory for corruption indicators
+      if (fs.existsSync(cacheDir)) {
+        try {
+          const cacheStats = await this.getCacheStats(cacheDir);
+          
+          // Check for unusually large cache (potential corruption)
+          if (cacheStats.sizeMB > 500) {
+            issues.push(`Cache size ${cacheStats.sizeMB}MB is unusually large (>500MB)`);
+          }
+          
+          // Check for suspicious file patterns
+          const files = fs.readdirSync(cacheDir, { recursive: true });
+          const corruptPatterns = files.filter(file => 
+            file.toString().includes('corrupt') || 
+            file.toString().includes('tmp') ||
+            file.toString().includes('.lock')
+          );
+          
+          if (corruptPatterns.length > 0) {
+            issues.push(`Found ${corruptPatterns.length} potentially corrupt cache files`);
+          }
+          
+        } catch (error) {
+          issues.push(`Cannot validate cache directory: ${error.message}`);
+        }
+      }
+      
+      // Log validation results
+      if (issues.length > 0) {
+        console.warn('⚠️ Session validation found issues:');
+        issues.forEach(issue => console.warn(`  - ${issue}`));
+        
+        // Log validation issues
+        this.logSessionValidation(issues);
+        
+        // Decide if we should clean up
+        const criticalIssues = issues.filter(issue => 
+          issue.includes('corrupt') || 
+          issue.includes('unusually large') ||
+          issue.includes('Cannot access')
+        );
+        
+        if (criticalIssues.length > 0) {
+          console.log('🧹 Critical session issues detected, performing cleanup...');
+          await this.cleanBrowserCache();
+          return { valid: false, issues, cleaned: true };
+        }
+        
+        return { valid: false, issues, cleaned: false };
+      } else {
+        console.log('✅ Session validation passed - no issues detected');
+        return { valid: true, issues: [], cleaned: false };
+      }
+      
+    } catch (error) {
+      console.error('❌ Error during session validation:', error.message);
+      return { valid: false, issues: [`Validation error: ${error.message}`], cleaned: false };
+    }
+  }
+
+  /**
+   * Log session validation results
+   */
+  logSessionValidation(issues) {
+    const logEntry = {
+      timestamp: new Date().toISOString(),
+      event: 'SESSION_VALIDATION',
+      issuesCount: issues.length,
+      issues: issues,
+      severity: issues.some(issue => 
+        issue.includes('corrupt') || 
+        issue.includes('Cannot access')
+      ) ? 'CRITICAL' : 'WARNING'
+    };
+    
+    console.log('📝 Session validation logged:', JSON.stringify(logEntry));
+  }
+
+  /**
+   * Implement cache rotation to prevent single files from growing too large
+   */
+  async rotateCacheFiles() {
+    try {
+      console.log('🔄 Starting cache rotation...');
+      
+      const cacheDir = path.join(process.cwd(), '.wwebjs_cache');
+      if (!fs.existsSync(cacheDir)) {
+        console.log('📁 Cache directory does not exist, skipping rotation');
+        return { rotated: false, reason: 'No cache directory' };
+      }
+      
+      const maxFileSize = 50 * 1024 * 1024; // 50MB per file
+      const rotationThreshold = 100 * 1024 * 1024; // 100MB total before rotation
+      
+      // Get cache statistics
+      const cacheStats = await this.getCacheStats(cacheDir);
+      
+      if (cacheStats.sizeMB < (rotationThreshold / (1024 * 1024))) {
+        console.log(`📊 Cache size ${cacheStats.sizeMB}MB is below rotation threshold`);
+        return { rotated: false, reason: 'Below threshold' };
+      }
+      
+      // Find large files that need rotation
+      const largeFiles = [];
+      const scanDirectory = (dir) => {
+        const items = fs.readdirSync(dir, { withFileTypes: true });
+        
+        for (const item of items) {
+          const fullPath = path.join(dir, item.name);
+          
+          if (item.isDirectory()) {
+            scanDirectory(fullPath);
+          } else if (item.isFile()) {
+            try {
+              const stats = fs.statSync(fullPath);
+              if (stats.size > maxFileSize) {
+                largeFiles.push({
+                  path: fullPath,
+                  size: stats.size,
+                  sizeMB: Math.round(stats.size / (1024 * 1024) * 100) / 100
+                });
+              }
+            } catch (error) {
+              console.warn(`⚠️ Cannot check file ${fullPath}:`, error.message);
+            }
+          }
+        }
+      };
+      
+      scanDirectory(cacheDir);
+      
+      if (largeFiles.length === 0) {
+        console.log('📁 No large files found for rotation');
+        return { rotated: false, reason: 'No large files' };
+      }
+      
+      console.log(`🔍 Found ${largeFiles.length} large files for rotation:`);
+      largeFiles.forEach(file => {
+        console.log(`  - ${path.basename(file.path)}: ${file.sizeMB}MB`);
+      });
+      
+      // Create rotation backup directory
+      const rotationDir = path.join(cacheDir, 'rotated_' + Date.now());
+      fs.mkdirSync(rotationDir, { recursive: true });
+      
+      let rotatedCount = 0;
+      let totalSizeFreed = 0;
+      
+      // Move large files to rotation directory
+      for (const file of largeFiles) {
+        try {
+          const fileName = path.basename(file.path);
+          const rotatedPath = path.join(rotationDir, fileName);
+          
+          fs.renameSync(file.path, rotatedPath);
+          rotatedCount++;
+          totalSizeFreed += file.size;
+          
+          console.log(`📦 Rotated ${fileName} (${file.sizeMB}MB)`);
+        } catch (error) {
+          console.error(`❌ Failed to rotate ${file.path}:`, error.message);
+        }
+      }
+      
+      // Clean up old rotation directories (keep only last 3)
+      const rotationDirs = fs.readdirSync(cacheDir)
+        .filter(name => name.startsWith('rotated_'))
+        .map(name => ({
+          name,
+          path: path.join(cacheDir, name),
+          timestamp: parseInt(name.replace('rotated_', ''))
+        }))
+        .sort((a, b) => b.timestamp - a.timestamp);
+      
+      // Remove old rotation directories (keep only 3 most recent)
+      for (let i = 3; i < rotationDirs.length; i++) {
+        try {
+          fs.rmSync(rotationDirs[i].path, { recursive: true, force: true });
+          console.log(`🗑️ Cleaned up old rotation: ${rotationDirs[i].name}`);
+        } catch (error) {
+          console.warn(`⚠️ Failed to clean rotation ${rotationDirs[i].name}:`, error.message);
+        }
+      }
+      
+      const result = {
+        rotated: true,
+        filesRotated: rotatedCount,
+        sizeFreedMB: Math.round(totalSizeFreed / (1024 * 1024) * 100) / 100,
+        rotationDir: rotationDir
+      };
+      
+      console.log(`✅ Cache rotation completed: ${rotatedCount} files, ${result.sizeFreedMB}MB freed`);
+      this.logCacheRotation(result);
+      
+      return result;
+      
+    } catch (error) {
+      console.error('❌ Error during cache rotation:', error.message);
+      return { rotated: false, error: error.message };
+    }
+  }
+
+  /**
+   * Log cache rotation results
+   */
+  logCacheRotation(result) {
+    const logEntry = {
+      timestamp: new Date().toISOString(),
+      event: 'CACHE_ROTATION',
+      filesRotated: result.filesRotated || 0,
+      sizeFreedMB: result.sizeFreedMB || 0,
+      success: result.rotated,
+      error: result.error || null
+    };
+    
+    console.log('📝 Cache rotation logged:', JSON.stringify(logEntry));
+  }
+
   async shutdown() {
     console.log('🛑 Shutting down Persistent WhatsApp Client...');
     
@@ -1947,6 +2604,9 @@ class PersistentWhatsAppClient {
     
     this.stopConnectionMonitoring();
     this.stopPeriodicRestartTimer();
+    this.stopCacheMaintenanceTimer();
+    this.stopCacheMonitoring();
+    this.stopDiskSpaceMonitoring();
 
     if (this.lockRefreshInterval) {
       clearInterval(this.lockRefreshInterval);

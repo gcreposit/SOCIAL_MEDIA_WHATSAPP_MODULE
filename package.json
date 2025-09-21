@@ -24,7 +24,9 @@
     "qrcode": "^1.5.4",
     "qrcode-terminal": "^0.12.0",
     "socket.io": "^4.8.1",
-    "whatsapp-web.js": "^1.33.2",
+    "whatsapp-web.js": "github:pedroslopez/whatsapp-web.js",
+    "winston": "^3.17.0",
+    "winston-daily-rotate-file": "^5.0.0",
     "wwebjs-mongo": "^1.1.0"
   },
   "devDependencies": {

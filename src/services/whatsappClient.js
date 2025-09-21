@@ -306,13 +306,17 @@ class PersistentWhatsAppClient {
 
     this.client = new Client({
       authStrategy: authStrategy,
+      webVersionCache: {
+        type: "remote",
+        remotePath: "https://raw.githubusercontent.com/wppconnect-team/wa-version/main/html/2.2412.54.html"
+      },
       puppeteer: {
         headless: true,
         args: [
           '--no-sandbox',
           '--disable-setuid-sandbox',
           '--disable-gpu',
-          '--disable-dev-shm-usage',
+          '--disable-dev-shm-usage', // Critical for Z_BUF_ERROR prevention
           '--disable-web-security',
           '--disable-features=IsolateOrigins,site-per-process',
           '--disable-site-isolation-trials',

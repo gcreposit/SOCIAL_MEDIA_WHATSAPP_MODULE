@@ -7,6 +7,7 @@ const express = require('express');
 const http = require('http');
 const socketIo = require('socket.io');
 const path = require('path');
+const cors = require('cors');
 const apiRoutes = require('./routes/api');
 
 class Server {
@@ -31,6 +32,26 @@ class Server {
    * Set up Express middleware
    */
   setupMiddleware() {
+    // Enable CORS for cross-origin requests
+    this.app.use(cors({
+      origin: ['http://localhost:8080', 'http://localhost:9000', 'http://localhost:3000'],
+      credentials: true,
+      methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+      allowedHeaders: ['Origin', 'X-Requested-With', 'Content-Type', 'Accept', 'ngrok-skip-browser-warning', 'User-Agent']
+    }));
+
+    // Additional CORS headers for broader compatibility
+    this.app.use((req, res, next) => {
+      res.header('Access-Control-Allow-Origin', '*');
+      res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+      res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, ngrok-skip-browser-warning, User-Agent');
+      if (req.method === 'OPTIONS') {
+        res.sendStatus(200);
+      } else {
+        next();
+      }
+    });
+    
     // Serve static files from public directory
     this.app.use(express.static(path.join(__dirname, 'public')));
     

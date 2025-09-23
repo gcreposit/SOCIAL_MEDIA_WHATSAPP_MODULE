@@ -1643,6 +1643,7 @@ class PersistentWhatsAppClient {
             processedMessage.groupId,
             processedMessage.groupName,
             processedMessage.senderName,
+            processedMessage.mobileNumber,
             processedMessage.messageText,
             processedMessage.timestamp,
             processedMessage.imageAttachmentPath,

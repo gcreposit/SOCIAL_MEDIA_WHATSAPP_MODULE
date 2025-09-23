@@ -1076,6 +1076,7 @@ this.client.on('ready', async () => {
           processedMessage.groupId,
           processedMessage.groupName,
           processedMessage.senderName,
+          processedMessage.mobileNumber,
           processedMessage.messageText,
           processedMessage.timestamp,
           processedMessage.imageAttachmentPath,

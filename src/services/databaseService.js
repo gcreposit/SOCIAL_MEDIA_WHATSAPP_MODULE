@@ -83,6 +83,7 @@ class DatabaseService {
         group_id VARCHAR(255) NOT NULL,
         group_name VARCHAR(255),
         sender_name VARCHAR(255) NOT NULL,
+        mobile_number VARCHAR(20),
         message_text TEXT NOT NULL,
         timestamp DATETIME NOT NULL,
         image_attachment_path VARCHAR(255),
@@ -105,6 +106,7 @@ class DatabaseService {
 
     // Check and add new columns if they don't exist
     const checkAndAddColumns = [
+      { name: 'mobile_number', definition: 'VARCHAR(20)' },
       { name: 'video_attachment_path', definition: 'VARCHAR(255)' },
       { name: 'audio_attachment_path', definition: 'VARCHAR(255)' },
       { name: 'link_metadata', definition: 'JSON' },
@@ -211,7 +213,7 @@ class DatabaseService {
    * @param {string} replyAttachmentPath - Path to attachment in the replied message (optional)
    * @param {string} attachmentType - Unified type of attachment (optional)
    */
-  async saveMessage(groupId, groupName, senderName, messageText, timestamp, 
+  async saveMessage(groupId, groupName, senderName, mobileNumber, messageText, timestamp, 
     imageAttachmentPath = null, documentAttachmentPath = null, videoAttachmentPath = null, 
     audioAttachmentPath = null, linkMetadata = null, batchAttachmentPath = null, batchMetadata = null,
     replyToMessageId = null, replyText = null, replyAttachmentType = null, replyAttachmentPath = null,
@@ -224,17 +226,18 @@ class DatabaseService {
     try {
       const query = `
         INSERT INTO messages 
-        (group_id, group_name, sender_name, message_text, timestamp, 
+        (group_id, group_name, sender_name, mobile_number, message_text, timestamp, 
          image_attachment_path, document_attachment_path, video_attachment_path, audio_attachment_path, 
          link_metadata, batch_attachment_path, batch_metadata,
          reply_to_message_id, reply_text, reply_attachment_type, reply_attachment_path, attachment_type) 
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `;
       // Convert JSON objects to strings if they exist
       console.log('📝 Preparing data for database insertion:');
       console.log('- Group ID:', groupId);
       console.log('- Group Name:', groupName);
       console.log('- Sender:', senderName);
+      console.log('- Mobile Number:', mobileNumber);
       console.log('- Message Text Length:', messageText ? messageText.length : 0);
       console.log('- Image Path:', imageAttachmentPath);
       console.log('- Reply To ID:', replyToMessageId);
@@ -268,6 +271,7 @@ class DatabaseService {
         groupId,
         groupName,
         senderName,
+        mobileNumber,
         messageText,
         timestamp,
         imageAttachmentPath,

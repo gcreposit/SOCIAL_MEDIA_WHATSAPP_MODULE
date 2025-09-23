@@ -265,6 +265,10 @@ class MessageProcessor {
       // Get contact (sender) information
       const contact = await rawMessage.getContact();
       
+      // Extract mobile number from contact ID
+      // WhatsApp contact ID format is usually like: "1234567890@c.us"
+      const mobileNumber = contact.id._serialized.split('@')[0];
+      
       // Enhanced logging for group and sender information with color
       // Add a single util declaration at the top of the function
       const util = require('util');
@@ -279,7 +283,8 @@ class MessageProcessor {
         },
         sender: {
           name: contact.pushname || contact.name || 'Unknown',
-          id: contact.id._serialized
+          id: contact.id._serialized,
+          mobileNumber: mobileNumber
         }
       };
       console.log(util.inspect(extractionInfo, { colors: true, depth: null }));
@@ -291,6 +296,7 @@ class MessageProcessor {
         groupName: chat.name,
         senderId: contact.id._serialized,
         senderName: contact.pushname || contact.name || 'Unknown',
+        mobileNumber: mobileNumber,
         messageText: rawMessage.body,
         timestamp: rawMessage.timestamp ? new Date(rawMessage.timestamp * 1000) : new Date(),
         isGroup: chat.isGroup
@@ -674,6 +680,7 @@ class MessageProcessor {
       groupId: message.groupId,
       groupName: message.groupName,
       senderName: message.senderName,
+      mobileNumber: message.mobileNumber || null,
       messageText: message.messageText,
       timestamp: message.timestamp,
       imageAttachmentPath: message.imageAttachmentPath || null,

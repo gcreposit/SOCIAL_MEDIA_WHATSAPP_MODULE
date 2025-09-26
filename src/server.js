@@ -34,7 +34,7 @@ class Server {
   setupMiddleware() {
     // Enable CORS for cross-origin requests
     this.app.use(cors({
-      origin: ['http://localhost:8080', 'http://localhost:9000', 'http://localhost:3000'],
+      origin: ['http://localhost:8080', 'http://localhost:9000', 'http://localhost:3000','http://94.136.189.241:2121'],
       credentials: true,
       methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
       allowedHeaders: ['Origin', 'X-Requested-With', 'Content-Type', 'Accept', 'ngrok-skip-browser-warning', 'User-Agent']

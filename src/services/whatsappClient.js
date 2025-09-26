@@ -80,6 +80,12 @@ class PersistentWhatsAppClient {
     this.sessionSaveQueue = [];
     this.restartPending = false;
     this.sessionOperationTimeout = 30000; // 30 seconds timeout for session operations
+    
+    // Session expiry management - Force session cleanup after 3 days
+    this.sessionCreatedAt = null;
+    this.sessionExpiryDays = 3; // Force logout after 3 days
+    this.sessionExpiryTimer = null;
+    this.sessionExpiryCheckInterval = 60 * 60 * 1000; // Check every hour
   }
 
   /**
@@ -654,6 +660,13 @@ class PersistentWhatsAppClient {
       this.isAuthenticated = true;
       this.reconnectAttempts = 0;
       this.clearQRCode();
+      
+      // Record session creation time for expiry tracking
+      this.sessionCreatedAt = new Date();
+      console.log(`📅 Session created at: ${this.sessionCreatedAt.toISOString()}`);
+      
+      // Start session expiry monitoring
+      this.startSessionExpiryMonitoring();
       
       // Broadcast status update to all connected clients
       this.broadcastStatusUpdate();
@@ -2584,6 +2597,166 @@ class PersistentWhatsAppClient {
     console.log('📝 Cache rotation logged:', JSON.stringify(logEntry));
   }
 
+  /**
+   * Start monitoring session expiry
+   */
+  startSessionExpiryMonitoring() {
+    if (this.sessionExpiryTimer) {
+      clearInterval(this.sessionExpiryTimer);
+    }
+
+    console.log('🕐 Starting session expiry monitoring...');
+    
+    // Check immediately
+    this.checkSessionExpiry();
+    
+    // Set up interval to check every hour
+    this.sessionExpiryTimer = setInterval(() => {
+      this.checkSessionExpiry();
+    }, this.sessionExpiryCheckInterval);
+  }
+
+  /**
+   * Stop session expiry monitoring
+   */
+  stopSessionExpiryMonitoring() {
+    if (this.sessionExpiryTimer) {
+      clearInterval(this.sessionExpiryTimer);
+      this.sessionExpiryTimer = null;
+      console.log('🛑 Session expiry monitoring stopped');
+    }
+  }
+
+  /**
+   * Check if session has expired and handle cleanup
+   */
+  async checkSessionExpiry() {
+    if (!this.sessionCreatedAt || !this.isAuthenticated) {
+      return;
+    }
+
+    const now = new Date();
+    const sessionAge = now - this.sessionCreatedAt;
+    const expiryThreshold = this.sessionExpiryDays * 24 * 60 * 60 * 1000; // 3 days in milliseconds
+    
+    // Check if it's past midnight and session is older than 3 days
+    const isAfterMidnight = now.getHours() === 0;
+    const isExpired = sessionAge >= expiryThreshold;
+    
+    if (isExpired && isAfterMidnight) {
+      console.log('⏰ Session has expired after 3 days. Forcing session cleanup...');
+      await this.forceSessionExpiry();
+    } else {
+      const remainingTime = expiryThreshold - sessionAge;
+      const remainingHours = Math.floor(remainingTime / (60 * 60 * 1000));
+      console.log(`⏳ Session expires in ${remainingHours} hours`);
+    }
+  }
+
+  /**
+   * Force session expiry and cleanup
+   */
+  async forceSessionExpiry() {
+    try {
+      console.log('🔄 Forcing WhatsApp session expiry...');
+      
+      // Stop all monitoring timers
+      this.stopSessionExpiryMonitoring();
+      this.stopConnectionMonitoring();
+      this.stopPeriodicRestartTimer();
+      this.stopCacheMaintenanceTimer();
+      this.stopCacheMonitoring();
+      this.stopDiskSpaceMonitoring();
+      
+      // Clear session data
+      await this.clearSessionData();
+      
+      // Reset session tracking
+      this.sessionCreatedAt = null;
+      this.isAuthenticated = false;
+      this.isClientReady = false;
+      
+      console.log('✅ Session expiry completed. QR code scan will be required on next startup.');
+      
+      // Optionally restart the client to show QR code immediately
+      // await this.gracefulRestart('SESSION_EXPIRED');
+      
+    } catch (error) {
+      console.error('❌ Error during session expiry:', error);
+    }
+  }
+
+  /**
+   * Clear all session data (local and MongoDB)
+   */
+  async clearSessionData() {
+    try {
+      console.log('🧹 Clearing session data...');
+      
+      // Destroy existing client
+      if (this.client) {
+        try {
+          await this.client.destroy();
+          console.log('✅ WhatsApp client destroyed');
+        } catch (error) {
+          console.error('⚠️ Error destroying client:', error);
+        }
+      }
+      
+      // Clear local session files
+      await this.clearSession();
+      
+      // Clear MongoDB session if using RemoteAuth
+      if (this.useRemoteAuth && mongoose.connection.readyState === 1) {
+        await this.clearMongoDBSession();
+      }
+      
+      // Clear browser cache
+      await this.cleanBrowserCache();
+      
+      console.log('✅ All session data cleared');
+      
+    } catch (error) {
+      console.error('❌ Error clearing session data:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Clear MongoDB session data
+   */
+  async clearMongoDBSession() {
+    try {
+      console.log('🗄️ Clearing MongoDB session data...');
+      
+      const db = mongoose.connection.db;
+      
+      // Get all collections
+      const collections = await db.listCollections().toArray();
+      const sessionCollections = collections.filter(col => 
+        col.name.includes('whatsapp') || 
+        col.name.includes('session') ||
+        col.name.includes('auth')
+      );
+      
+      // Clear session collections
+      for (const collection of sessionCollections) {
+        try {
+          await db.collection(collection.name).deleteMany({});
+          console.log(`✅ Cleared collection: ${collection.name}`);
+        } catch (error) {
+          console.error(`❌ Error clearing collection ${collection.name}:`, error);
+        }
+      }
+      
+      console.log('✅ MongoDB session data cleared');
+      
+    } catch (error) {
+      console.error('❌ Error clearing MongoDB session:', error);
+      throw error;
+    }
+  }
+
   async shutdown() {
     console.log('🛑 Shutting down Persistent WhatsApp Client...');
     
@@ -2612,6 +2785,7 @@ class PersistentWhatsAppClient {
     this.stopCacheMaintenanceTimer();
     this.stopCacheMonitoring();
     this.stopDiskSpaceMonitoring();
+    this.stopSessionExpiryMonitoring();
 
     if (this.lockRefreshInterval) {
       clearInterval(this.lockRefreshInterval);

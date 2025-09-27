@@ -48,6 +48,10 @@ class DatabaseService {
       await this.sequelize.sync({ force: false }); // Don't alter existing tables to avoid duplicate column errors
       console.log('✅ Database models synchronized without altering existing tables');
       
+      // Run auto-migration for PostBank to add missing WhatsApp-specific columns
+      await this.models.PostBank.autoMigrate();
+      console.log('✅ PostBank auto-migration completed');
+      
       this.isConnected = true;
       return true;
     } catch (error) {

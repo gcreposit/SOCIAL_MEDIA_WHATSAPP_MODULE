@@ -52,15 +52,15 @@ module.exports = (sequelize) => {
     },
     
     post_date: {
-      type: DataTypes.STRING(20),
+      type: DataTypes.DATEONLY,
       allowNull: false,
       comment: 'Date in dd/mm/yyyy format when data was received'
     },
     
     post_time: {
-      type: DataTypes.STRING(20),
+      type: DataTypes.TIME,
       allowNull: false,
-      comment: 'Time when message was received'
+      comment: 'Time when message was received in 24-hour format'
     },
     
     // Author information
@@ -236,6 +236,76 @@ module.exports = (sequelize) => {
     // Indexes removed to prevent duplicate key errors
     // Existing indexes in database will be used
   });
+
+  // AUTO-MIGRATION FUNCTION - Ensures WhatsApp-specific fields are added to existing table
+  PostBank.autoMigrate = async () => {
+    try {
+      console.log('Starting PostBank auto-migration...');
+      const queryInterface = sequelize.getQueryInterface();
+      
+      // Check if table exists first
+      const tables = await queryInterface.showAllTables();
+      if (!tables.includes('post_bank')) {
+        console.log('post_bank table does not exist, will be created by sync()');
+        return;
+      }
+
+      // Get existing columns
+      const tableInfo = await queryInterface.describeTable('post_bank');
+      console.log('Existing columns in post_bank:', Object.keys(tableInfo));
+      
+      // Define ALL WhatsApp-specific columns that need to be added
+      const whatsappColumns = {
+        mobile_number: {
+          type: DataTypes.STRING(20),
+          allowNull: true,
+          comment: 'Mobile number from original WhatsApp message'
+        },
+        group_id: {
+          type: DataTypes.STRING(100),
+          allowNull: true,
+          comment: 'WhatsApp group ID for reference'
+        },
+        reply_to_message_id: {
+          type: DataTypes.STRING(100),
+          allowNull: true,
+          comment: 'ID of message being replied to'
+        },
+        reply_text: {
+          type: DataTypes.TEXT,
+          allowNull: true,
+          comment: 'Text of the message being replied to'
+        },
+        created_at: {
+          type: DataTypes.DATE,
+          defaultValue: DataTypes.NOW,
+          comment: 'Record creation timestamp'
+        },
+        updated_at: {
+          type: DataTypes.DATE,
+          defaultValue: DataTypes.NOW,
+          comment: 'Record update timestamp'
+        }
+      };
+
+      // Add missing columns
+      let columnsAdded = 0;
+      for (const [columnName, columnDef] of Object.entries(whatsappColumns)) {
+        if (!tableInfo[columnName]) {
+          console.log(`Adding missing column: ${columnName}`);
+          await queryInterface.addColumn('post_bank', columnName, columnDef);
+          columnsAdded++;
+        } else {
+          console.log(`Column ${columnName} already exists, skipping...`);
+        }
+      }
+
+      console.log(`PostBank auto-migration completed. ${columnsAdded} columns added.`);
+    } catch (error) {
+      console.error('Error during PostBank auto-migration:', error);
+      // Don't throw error to prevent app crash
+    }
+  };
 
   return PostBank;
 };

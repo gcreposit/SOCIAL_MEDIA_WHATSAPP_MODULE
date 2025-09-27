@@ -636,7 +636,7 @@ class MessageProcessor {
     
     // Create date and time from timestamp
     const messageDate = new Date(message.timestamp);
-    const postDate = messageDate.toLocaleDateString('en-GB'); // dd/mm/yyyy format
+    const postDate = messageDate.toISOString().split('T')[0]; // YYYY-MM-DD format for database
     const postTime = messageDate.toLocaleTimeString('en-US', { hour12: false }); // HH:mm:ss format
     
     const postBankData = {

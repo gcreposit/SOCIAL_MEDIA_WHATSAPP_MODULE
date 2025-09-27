@@ -1652,32 +1652,25 @@ class PersistentWhatsAppClient {
       const processedMessage = await this.messageProcessor.processMessage(message);
 
       if (processedMessage) {
-        const insertId = await this.dbService.saveMessage(
-            processedMessage.groupId,
-            processedMessage.groupName,
-            processedMessage.senderName,
-            processedMessage.mobileNumber,
-            processedMessage.messageText,
-            processedMessage.timestamp,
-            processedMessage.imageAttachmentPath,
-            processedMessage.documentAttachmentPath,
-            processedMessage.videoAttachmentPath,
-            processedMessage.audioAttachmentPath,
-            processedMessage.linkMetadata,
-            processedMessage.batchAttachmentPath,
-            processedMessage.batchMetadata,
-            processedMessage.replyToMessageId,
-            processedMessage.replyText,
-            processedMessage.replyAttachmentType,
-            processedMessage.replyAttachmentPath,
-            processedMessage.attachmentType
-        );
+        // Format data for PostBank and CommonAttachment tables
+        const postBankData = this.messageProcessor.formatPostBankData(processedMessage);
+        
+        // Create PostBank record
+        const postBankRecord = await this.dbService.models.PostBank.create(postBankData);
+        console.log(`✅ PostBank record created with ID: ${postBankRecord.id}`);
+        
+        // Create attachment records if any exist
+        const attachmentData = this.messageProcessor.formatAttachmentData(processedMessage, postBankRecord.id);
+        if (attachmentData.length > 0) {
+          const attachmentRecords = await this.dbService.models.CommonAttachment.bulkCreate(attachmentData);
+          console.log(`✅ Created ${attachmentRecords.length} attachment records`);
+        }
 
-        console.log(`✅ Message saved:`, util.inspect({ id: insertId }, { colors: true, depth: null }));
+        console.log(`✅ Message saved:`, util.inspect({ id: postBankRecord.id }, { colors: true, depth: null }));
 
         if (this.server && typeof this.server.broadcastNewMessage === 'function') {
           this.server.broadcastNewMessage({
-            id: insertId,
+            id: postBankRecord.id,
             ...processedMessage
           });
         }

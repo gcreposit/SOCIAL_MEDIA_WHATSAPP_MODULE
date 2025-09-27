@@ -618,6 +618,240 @@ class MessageProcessor {
    * @param {Object} message - Validated message data
    * @returns {Object} - Formatted message data
    */
+  /**
+   * Format message data for PostBank table
+   * @param {Object} message - Processed message data
+   * @returns {Object} - Formatted data for PostBank
+   */
+  formatPostBankData(message) {
+    const util = require('util');
+    
+    console.log('Formatting message data for PostBank storage:');
+    console.log(util.inspect({
+      messageText: message.messageText,
+      groupName: message.groupName,
+      senderName: message.senderName,
+      timestamp: message.timestamp
+    }, { colors: true, depth: null }));
+    
+    // Create date and time from timestamp
+    const messageDate = new Date(message.timestamp);
+    const postDate = messageDate.toLocaleDateString('en-GB'); // dd/mm/yyyy format
+    const postTime = messageDate.toLocaleTimeString('en-US', { hour12: false }); // HH:mm:ss format
+    
+    const postBankData = {
+      // PostBank specific fields
+      post_title: '', // Always blank as specified
+      post_snippet: message.messageText || '',
+      post_url: '',
+      core_source: 'Whatsapp',
+      source: 'Whatsapp',
+      post_timestamp: message.timestamp,
+      photo_attachment: null, // Always null - attachments stored in CommonAttachment table
+      video_attachment: null, // Always null - attachments stored in CommonAttachment table
+      post_date: postDate,
+      post_time: postTime,
+      author_name: message.groupName || '',
+      author_username: message.senderName || '',
+      post_language: 'hi', // Default to hindi as specified
+      post_location: null,
+      post_type: null,
+      retweets: null,
+      bookmarks: null,
+      comments: null,
+      likes: null,
+      views: null,
+      attachments: null,
+      mention_ids: null,
+      mention_hashtags: null,
+      keyword: null,
+      unique_hash: null,
+      video_id: null,
+      duration: null,
+      category_id: null,
+      channel_id: null,
+      analysisStatus: 'NOT_ANALYZED', // Default for new WhatsApp messages
+      post_id: null,
+      
+      // WhatsApp specific fields to maintain compatibility
+      mobile_number: message.mobileNumber || null,
+      group_id: message.groupId || null,
+      reply_text: message.replyText || null
+    };
+
+    console.log('🔍 FORMATTED POSTBANK DATA:', JSON.stringify(postBankData, null, 2));
+    
+    return postBankData;
+  }
+
+  /**
+   * Format attachment data for CommonAttachment table
+   * @param {Object} message - Processed message data
+   * @param {number} postBankId - ID of the associated PostBank record
+   * @returns {Array} - Array of attachment objects
+   */
+  formatAttachmentData(message, postBankId) {
+    const util = require('util');
+    const attachments = [];
+    
+    console.log('Formatting attachment data for CommonAttachment table:');
+    
+    // Process main message attachments
+    if (message.imageAttachmentPath) {
+      attachments.push({
+        post_bank_id: postBankId,
+        attachment_type: 'image',
+        image_attachment_path: message.imageAttachmentPath,
+        video_attachment_path: null,
+        audio_attachment_path: null,
+        document_attachment_path: null,
+        link_metadata: null,
+        reply_attachment_type: message.replyAttachmentType || null,
+        reply_attachment_path: message.replyAttachmentPath || null,
+        mime_type: null,
+        mobile_number: message.mobileNumber || null,
+        group_id: message.groupId || null,
+        original_timestamp: message.timestamp,
+        processing_status: 'pending',
+        download_status: 'completed'
+      });
+    }
+    
+    if (message.videoAttachmentPath) {
+      attachments.push({
+        post_bank_id: postBankId,
+        attachment_type: 'video',
+        image_attachment_path: null,
+        video_attachment_path: message.videoAttachmentPath,
+        audio_attachment_path: null,
+        document_attachment_path: null,
+        link_metadata: null,
+        reply_attachment_type: message.replyAttachmentType || null,
+        reply_attachment_path: message.replyAttachmentPath || null,
+        mime_type: null,
+        mobile_number: message.mobileNumber || null,
+        group_id: message.groupId || null,
+        original_timestamp: message.timestamp,
+        processing_status: 'pending',
+        download_status: 'completed'
+      });
+    }
+    
+    if (message.audioAttachmentPath) {
+      attachments.push({
+        post_bank_id: postBankId,
+        attachment_type: 'audio',
+        image_attachment_path: null,
+        video_attachment_path: null,
+        audio_attachment_path: message.audioAttachmentPath,
+        document_attachment_path: null,
+        link_metadata: null,
+        reply_attachment_type: message.replyAttachmentType || null,
+        reply_attachment_path: message.replyAttachmentPath || null,
+        mime_type: null,
+        mobile_number: message.mobileNumber || null,
+        group_id: message.groupId || null,
+        original_timestamp: message.timestamp,
+        processing_status: 'pending',
+        download_status: 'completed'
+      });
+    }
+    
+    if (message.documentAttachmentPath) {
+      attachments.push({
+        post_bank_id: postBankId,
+        attachment_type: 'document',
+        image_attachment_path: null,
+        video_attachment_path: null,
+        audio_attachment_path: null,
+        document_attachment_path: message.documentAttachmentPath,
+        link_metadata: null,
+        reply_attachment_type: message.replyAttachmentType || null,
+        reply_attachment_path: message.replyAttachmentPath || null,
+        mime_type: null,
+        mobile_number: message.mobileNumber || null,
+        group_id: message.groupId || null,
+        original_timestamp: message.timestamp,
+        processing_status: 'pending',
+        download_status: 'completed'
+      });
+    }
+    
+    if (message.linkMetadata) {
+      attachments.push({
+        post_bank_id: postBankId,
+        attachment_type: 'link',
+        image_attachment_path: null,
+        video_attachment_path: null,
+        audio_attachment_path: null,
+        document_attachment_path: null,
+        link_metadata: message.linkMetadata,
+        reply_attachment_type: message.replyAttachmentType || null,
+        reply_attachment_path: message.replyAttachmentPath || null,
+        mime_type: null,
+        mobile_number: message.mobileNumber || null,
+        group_id: message.groupId || null,
+        original_timestamp: message.timestamp,
+        processing_status: 'pending',
+        download_status: 'completed'
+      });
+    }
+    
+    if (message.batchAttachmentPath) {
+      attachments.push({
+        post_bank_id: postBankId,
+        attachment_type: 'batch',
+        image_attachment_path: null,
+        video_attachment_path: null,
+        audio_attachment_path: null,
+        document_attachment_path: null,
+        link_metadata: null,
+        batch_attachment_path: message.batchAttachmentPath,
+        batch_metadata: message.batchMetadata,
+        reply_attachment_type: message.replyAttachmentType || null,
+        reply_attachment_path: message.replyAttachmentPath || null,
+        file_size: null,
+        file_name: null,
+        mime_type: null,
+        mobile_number: message.mobileNumber || null,
+        group_id: message.groupId || null,
+        original_timestamp: message.timestamp,
+        processing_status: 'pending',
+        download_status: 'completed'
+      });
+    }
+    
+    // Process reply attachments as separate records if no main attachments exist
+    if (attachments.length === 0 && message.replyAttachmentPath && message.replyAttachmentType) {
+      console.log('📎 Creating separate record for reply attachment...');
+      attachments.push({
+        post_bank_id: postBankId,
+        attachment_type: 'reply',
+        image_attachment_path: message.replyAttachmentType === 'image' ? message.replyAttachmentPath : null,
+        video_attachment_path: message.replyAttachmentType === 'video' ? message.replyAttachmentPath : null,
+        audio_attachment_path: message.replyAttachmentType === 'audio' ? message.replyAttachmentPath : null,
+        document_attachment_path: message.replyAttachmentType === 'document' ? message.replyAttachmentPath : null,
+        link_metadata: null,
+        batch_attachment_path: null,
+        batch_metadata: null,
+        reply_attachment_type: message.replyAttachmentType,
+        reply_attachment_path: message.replyAttachmentPath,
+        file_size: null,
+        file_name: null,
+        mime_type: null,
+        mobile_number: message.mobileNumber || null,
+        group_id: message.groupId || null,
+        original_timestamp: message.timestamp,
+        processing_status: 'pending',
+        download_status: 'completed'
+      });
+    }
+    
+    console.log(`🔍 FORMATTED ${attachments.length} ATTACHMENTS:`, util.inspect(attachments, { colors: true, depth: null }));
+    
+    return attachments;
+  }
+
   formatMessageData(message) {
     // Add a single util declaration at the top of the function
     const util = require('util');

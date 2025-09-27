@@ -1,41 +1,54 @@
 /**
  * Database Service
- * Handles all MySQL database operations
+ * Handles all database operations using Sequelize ORM with PostBank and CommonAttachment models
  */
 
-const mysql = require('mysql2/promise');
+const { Sequelize } = require('sequelize');
+const { initializeModels } = require('../models');
 
 class DatabaseService {
   constructor() {
-    this.pool = null;
+    this.sequelize = null;
+    this.models = null;
     this.isConnected = false;
   }
 
   /**
-   * Connect to MySQL database
+   * Connect to database using Sequelize
    */
   async connect() {
     try {
-      this.pool = mysql.createPool({
-        host: process.env.DB_HOST,
-        user: process.env.DB_USER,
-        password: process.env.DB_PASSWORD,
-        database: process.env.DB_NAME,
-        port: process.env.DB_PORT || 3306,
-        waitForConnections: true,
-        connectionLimit: 10,
-        queueLimit: 0
-      });
+      // Initialize Sequelize connection
+      this.sequelize = new Sequelize(
+        process.env.DB_NAME,
+        process.env.DB_USER,
+        process.env.DB_PASSWORD,
+        {
+          host: process.env.DB_HOST,
+          port: process.env.DB_PORT || 3306,
+          dialect: 'mysql',
+          logging: false, // Set to console.log to see SQL queries
+          pool: {
+            max: 10,
+            min: 0,
+            acquire: 30000,
+            idle: 10000
+          }
+        }
+      );
 
       // Test connection
-      const connection = await this.pool.getConnection();
+      await this.sequelize.authenticate();
       console.log('✅ Database connection test successful');
-      connection.release();
+      
+      // Initialize models
+      this.models = initializeModels(this.sequelize);
+      
+      // Sync database (create tables if they don't exist, but don't alter existing ones)
+      await this.sequelize.sync({ force: false }); // Don't alter existing tables to avoid duplicate column errors
+      console.log('✅ Database models synchronized without altering existing tables');
+      
       this.isConnected = true;
-      
-      // Create tables if they don't exist
-      await this.initializeTables();
-      
       return true;
     } catch (error) {
       console.error('Database connection error:', error);
@@ -66,138 +79,19 @@ class DatabaseService {
    * Disconnect from database
    */
   async disconnect() {
-    if (this.pool) {
-      await this.pool.end();
+    if (this.sequelize) {
+      await this.sequelize.close();
       this.isConnected = false;
       console.log('Database disconnected');
     }
   }
 
   /**
-   * Initialize database tables
-   */
-  async initializeTables() {
-    const createMessagesTable = `
-      CREATE TABLE IF NOT EXISTS messages (
-        id INT AUTO_INCREMENT PRIMARY KEY,
-        group_id VARCHAR(255) NOT NULL,
-        group_name VARCHAR(255),
-        sender_name VARCHAR(255) NOT NULL,
-        mobile_number VARCHAR(20),
-        message_text TEXT NOT NULL,
-        timestamp DATETIME NOT NULL,
-        image_attachment_path VARCHAR(255),
-        document_attachment_path VARCHAR(255),
-        video_attachment_path VARCHAR(255),
-        audio_attachment_path VARCHAR(255),
-        link_metadata JSON,
-        batch_attachment_path VARCHAR(255),
-        batch_metadata JSON,
-        reply_to_message_id VARCHAR(255),
-        reply_text TEXT,
-        reply_attachment_type VARCHAR(50),
-        reply_attachment_path VARCHAR(255),
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        INDEX idx_group_id (group_id),
-        INDEX idx_timestamp (timestamp),
-        INDEX idx_reply_to_message_id (reply_to_message_id)
-      );
-    `;
-
-    // Check and add new columns if they don't exist
-    const checkAndAddColumns = [
-      { name: 'mobile_number', definition: 'VARCHAR(20)' },
-      { name: 'video_attachment_path', definition: 'VARCHAR(255)' },
-      { name: 'audio_attachment_path', definition: 'VARCHAR(255)' },
-      { name: 'link_metadata', definition: 'JSON' },
-      { name: 'batch_attachment_path', definition: 'VARCHAR(255)' },
-      { name: 'batch_metadata', definition: 'JSON' },
-      { name: 'reply_to_message_id', definition: 'VARCHAR(255)' },
-      { name: 'reply_text', definition: 'TEXT' },
-      { name: 'reply_attachment_type', definition: 'VARCHAR(50)' },
-      { name: 'reply_attachment_path', definition: 'VARCHAR(255)' },
-      { name: 'attachment_type', definition: 'VARCHAR(50)' }
-    ];
-    
-    try {
-      // Create the messages table if it doesn't exist
-      await this.pool.query(createMessagesTable);
-      
-      // Check for each column and add if it doesn't exist
-      for (const column of checkAndAddColumns) {
-        const [rows] = await this.pool.query(`
-          SELECT COUNT(*) as count 
-          FROM INFORMATION_SCHEMA.COLUMNS 
-          WHERE TABLE_SCHEMA = DATABASE() 
-          AND TABLE_NAME = 'messages' 
-          AND COLUMN_NAME = ?
-        `, [column.name]);
-        
-        if (rows[0].count === 0) {
-          console.log(`Adding column ${column.name} to messages table...`);
-          await this.pool.query(`ALTER TABLE messages ADD COLUMN ${column.name} ${column.definition}`);
-          console.log(`Column ${column.name} added successfully.`);
-        }
-      }
-      
-      // Check if link_attachment_path exists and remove it if it does
-      const [linkPathRows] = await this.pool.query(`
-        SELECT COUNT(*) as count 
-        FROM INFORMATION_SCHEMA.COLUMNS 
-        WHERE TABLE_SCHEMA = DATABASE() 
-        AND TABLE_NAME = 'messages' 
-        AND COLUMN_NAME = 'link_attachment_path'
-      `);
-      
-      if (linkPathRows[0].count > 0) {
-        console.log('Removing deprecated link_attachment_path column...');
-        await this.pool.query('ALTER TABLE messages DROP COLUMN link_attachment_path');
-        console.log('Column link_attachment_path removed successfully.');
-      }
-      
-      console.log('Database tables initialized successfully');
-    } catch (error) {
-      console.error('Error initializing database tables:', error);
-      throw error;
-    }
-
-    try {
-      await this.pool.query(createMessagesTable);
-      
-      // Check and add columns if they don't exist
-      for (const column of checkAndAddColumns) {
-        try {
-          // Check if column exists
-          const [rows] = await this.pool.query(`
-            SELECT COUNT(*) as count FROM INFORMATION_SCHEMA.COLUMNS 
-            WHERE TABLE_SCHEMA = DATABASE() 
-            AND TABLE_NAME = 'messages' 
-            AND COLUMN_NAME = ?
-          `, [column.name]);
-          
-          // If column doesn't exist, add it
-          if (rows[0].count === 0) {
-            await this.pool.query(`ALTER TABLE messages ADD COLUMN ${column.name} ${column.definition}`);
-            console.log(`Added column ${column.name} to messages table`);
-          }
-        } catch (alterError) {
-          // Log error but continue with other columns
-          console.error(`Error checking/adding column ${column.name}:`, alterError);
-        }
-      }
-      
-      console.log('Database tables initialized and updated with new columns');
-    } catch (error) {
-      console.error('Error initializing tables:', error);
-      throw error;
-    }
-  }
-
-  /**
-   * Save message to database
+   * Save message to PostBank with attachments in CommonAttachment table
    * @param {string} groupId - Group ID
    * @param {string} groupName - Group name
    * @param {string} senderName - Sender name
+   * @param {string} mobileNumber - Mobile number
    * @param {string} messageText - Message content
    * @param {Date} timestamp - Message timestamp
    * @param {string} imageAttachmentPath - Path to image attachment (optional)
@@ -224,84 +118,134 @@ class DatabaseService {
     }
 
     try {
-      const query = `
-        INSERT INTO messages 
-        (group_id, group_name, sender_name, mobile_number, message_text, timestamp, 
-         image_attachment_path, document_attachment_path, video_attachment_path, audio_attachment_path, 
-         link_metadata, batch_attachment_path, batch_metadata,
-         reply_to_message_id, reply_text, reply_attachment_type, reply_attachment_path, attachment_type) 
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      `;
-      // Convert JSON objects to strings if they exist
-      console.log('📝 Preparing data for database insertion:');
+      console.log('📝 Preparing data for PostBank insertion:');
       console.log('- Group ID:', groupId);
       console.log('- Group Name:', groupName);
       console.log('- Sender:', senderName);
       console.log('- Mobile Number:', mobileNumber);
       console.log('- Message Text Length:', messageText ? messageText.length : 0);
-      console.log('- Image Path:', imageAttachmentPath);
-      console.log('- Reply To ID:', replyToMessageId);
-      console.log('- Reply Text:', replyText);
-      console.log('- Reply Attachment Type:', replyAttachmentType);
-      console.log('- Reply Attachment Path:', replyAttachmentPath);
+
+      // Format date and time for post_date and post_time
+      const messageDate = new Date(timestamp);
+      const postDate = messageDate.toLocaleDateString('en-GB'); // dd/mm/yyyy format
+      const postTime = messageDate.toLocaleTimeString('en-US', { hour12: false }); // HH:mm:ss format
+
+      // Create PostBank record
+      const postBankData = {
+        post_title: '', // Blank as specified
+        post_snippet: messageText || '',
+        post_url: '',
+        core_source: 'Whatsapp',
+        source: 'Whatsapp',
+        post_timestamp: timestamp,
+        photo_attachment: imageAttachmentPath ? true : false,
+        video_attachment: videoAttachmentPath ? true : false,
+        post_date: postDate,
+        post_time: postTime,
+        author_name: groupName || '',
+        author_username: senderName || '',
+        post_language: 'hi',
+        post_location: null,
+        post_type: null,
+        retweets: null,
+        bookmarks: null,
+        comments: null,
+        likes: null,
+        views: null,
+        attachments: null,
+        mention_ids: null,
+        mention_hashtags: null,
+        keyword: null,
+        unique_hash: null,
+        video_id: null,
+        duration: null,
+        category_id: null,
+        channel_id: null,
+        analysisStatus: 'NOT_ANALYZED', // Default for new WhatsApp messages
+        post_id: null,
+        // WhatsApp specific fields
+        mobile_number: mobileNumber,
+        group_id: groupId,
+        reply_to_message_id: replyToMessageId,
+        reply_text: replyText
+      };
+
+      console.log('🔄 Creating PostBank record...');
+      const postBankRecord = await this.models.PostBank.create(postBankData);
+      console.log('✅ PostBank record created with ID:', postBankRecord.id);
+
+      // Create attachment records if any attachments exist
+      const attachments = [];
       
-      // Convert JSON objects to strings if they exist
-      console.log('Link metadata before stringify:', linkMetadata);
-      
-      // Ensure linkMetadata is not null or undefined before stringifying
-      let linkMetadataStr = null;
-      if (linkMetadata) {
-        // If it's an empty array, create a default metadata object
-        if (Array.isArray(linkMetadata) && linkMetadata.length === 0) {
-          linkMetadata = [{
-            url: 'No URL provided',
-            title: 'No title',
-            description: 'No description'
-          }];
-        }
-        linkMetadataStr = JSON.stringify(linkMetadata);
+      if (imageAttachmentPath || documentAttachmentPath || videoAttachmentPath || 
+          audioAttachmentPath || batchAttachmentPath || linkMetadata) {
+        
+        const attachmentData = {
+          post_bank_id: postBankRecord.id,
+          attachment_type: attachmentType || this.determineAttachmentType({
+            imageAttachmentPath,
+            documentAttachmentPath,
+            videoAttachmentPath,
+            audioAttachmentPath,
+            batchAttachmentPath,
+            linkMetadata
+          }),
+          image_attachment_path: imageAttachmentPath,
+          document_attachment_path: documentAttachmentPath,
+          video_attachment_path: videoAttachmentPath,
+          audio_attachment_path: audioAttachmentPath,
+          batch_attachment_path: batchAttachmentPath,
+          link_metadata: linkMetadata,
+          batch_metadata: batchMetadata,
+          reply_attachment_type: replyAttachmentType,
+          reply_attachment_path: replyAttachmentPath,
+          timestamp: timestamp,
+          group_id: groupId,
+          group_name: groupName,
+          sender_name: senderName,
+          mobile_number: mobileNumber,
+          reply_to_message_id: replyToMessageId,
+          download_status: 'DOWNLOADED', // Assuming files are already downloaded
+          processing_status: 'NOT_PROCESSED'
+        };
+
+        console.log('🔄 Creating CommonAttachment record...');
+        const attachmentRecord = await this.models.CommonAttachment.create(attachmentData);
+        console.log('✅ CommonAttachment record created with ID:', attachmentRecord.id);
+        attachments.push(attachmentRecord);
       }
-      
-      console.log('Link metadata after stringify:', linkMetadataStr);
-      const batchMetadataStr = batchMetadata ? JSON.stringify(batchMetadata) : null;
 
-      console.log('🔄 Executing database query...');
-
-      const [result] = await this.pool.query(query, [
-        groupId,
-        groupName,
-        senderName,
-        mobileNumber,
-        messageText,
-        timestamp,
-        imageAttachmentPath,
-        documentAttachmentPath,
-        videoAttachmentPath,
-        audioAttachmentPath,
-        linkMetadataStr,
-        batchAttachmentPath,
-        batchMetadataStr,
-        replyToMessageId,
-        replyText,
-        replyAttachmentType,
-        replyAttachmentPath,
-        attachmentType
-      ]);
-      console.log('✅ DATABASE SAVE SUCCESSFUL!');
-      console.log('Insert ID:', result.insertId);
-      console.log('Affected Rows:', result.affectedRows);
+      console.log('✅ MESSAGE SAVE SUCCESSFUL!');
+      console.log('PostBank ID:', postBankRecord.id);
+      console.log('Attachments created:', attachments.length);
       console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-      return result.insertId;
+      
+      return postBankRecord.id;
     } catch (error) {
-      console.error('Error saving message:', error);
+      console.error('Error saving message to PostBank:', error);
       throw error;
     }
   }
 
   /**
-   * Get messages by group ID
+   * Determine attachment type based on available attachment paths
+   * @param {Object} attachments - Object containing attachment paths
+   * @returns {string} - Attachment type
+   */
+  determineAttachmentType(attachments) {
+    if (attachments.imageAttachmentPath) return 'image';
+    if (attachments.videoAttachmentPath) return 'video';
+    if (attachments.audioAttachmentPath) return 'audio';
+    if (attachments.documentAttachmentPath) return 'document';
+    if (attachments.batchAttachmentPath) return 'batch';
+    if (attachments.linkMetadata) return 'link';
+    return 'text';
+  }
+
+  /**
+   * Get posts by group ID from PostBank
    * @param {string} groupId - Group ID
-   * @param {number} limit - Maximum number of messages to retrieve
+   * @param {number} limit - Maximum number of posts to retrieve
    * @param {number} offset - Offset for pagination
    */
   async getMessagesByGroup(groupId, limit = 100, offset = 0) {
@@ -310,23 +254,27 @@ class DatabaseService {
     }
 
     try {
-      const query = `
-        SELECT * FROM messages 
-        WHERE group_id = ? 
-        ORDER BY timestamp DESC 
-        LIMIT ? OFFSET ?
-      `;
+      const posts = await this.models.PostBank.findAll({
+        where: { group_id: groupId },
+        include: [{
+          model: this.models.CommonAttachment,
+          as: 'commonAttachments',
+          required: false
+        }],
+        order: [['post_timestamp', 'DESC']],
+        limit: limit,
+        offset: offset
+      });
       
-      const [rows] = await this.pool.query(query, [groupId, limit, offset]);
-      return rows;
+      return posts;
     } catch (error) {
-      console.error('Error getting messages by group:', error);
+      console.error('Error getting posts by group:', error);
       throw error;
     }
   }
 
   /**
-   * Get all groups with message counts
+   * Get all groups with post counts from PostBank
    */
   async getAllGroups() {
     if (!this.isConnected) {
@@ -334,19 +282,31 @@ class DatabaseService {
     }
 
     try {
-      const query = `
-        SELECT 
-          group_id, 
-          group_name, 
-          COUNT(*) as message_count, 
-          MAX(timestamp) as last_message_time 
-        FROM messages 
-        GROUP BY group_id, group_name 
-        ORDER BY last_message_time DESC
-      `;
+      const groups = await this.models.PostBank.findAll({
+        attributes: [
+          'group_id',
+          'author_name',
+          [this.models.sequelize.fn('COUNT', this.models.sequelize.col('id')), 'message_count'],
+          [this.models.sequelize.fn('MAX', this.models.sequelize.col('post_timestamp')), 'last_message_time']
+        ],
+        where: {
+          group_id: {
+            [this.models.Sequelize.Op.ne]: null
+          }
+        },
+        group: ['group_id', 'author_name'],
+        order: [[this.models.sequelize.fn('MAX', this.models.sequelize.col('post_timestamp')), 'DESC']]
+      });
       
-      const [rows] = await this.pool.query(query);
-      return rows;
+      // Format the response to match the expected structure
+      const formattedGroups = groups.map(group => ({
+        group_id: group.group_id,
+        group_name: group.author_name,
+        message_count: parseInt(group.dataValues.message_count),
+        last_message_time: group.dataValues.last_message_time
+      }));
+      
+      return formattedGroups;
     } catch (error) {
       console.error('Error getting all groups:', error);
       throw error;
@@ -354,8 +314,8 @@ class DatabaseService {
   }
 
   /**
-   * Get all messages with pagination
-   * @param {number} limit - Maximum number of messages to retrieve
+   * Get all posts with pagination from PostBank
+   * @param {number} limit - Maximum number of posts to retrieve
    * @param {number} offset - Offset for pagination
    */
   async getAllMessages(limit = 100, offset = 0) {
@@ -364,16 +324,20 @@ class DatabaseService {
     }
 
     try {
-      const query = `
-        SELECT * FROM messages 
-        ORDER BY timestamp DESC 
-        LIMIT ? OFFSET ?
-      `;
+      const posts = await this.models.PostBank.findAll({
+        include: [{
+          model: this.models.CommonAttachment,
+          as: 'commonAttachments',
+          required: false
+        }],
+        order: [['post_timestamp', 'DESC']],
+        limit: limit,
+        offset: offset
+      });
       
-      const [rows] = await this.pool.query(query, [limit, offset]);
-      return rows;
+      return posts;
     } catch (error) {
-      console.error('Error getting all messages:', error);
+      console.error('Error getting all posts:', error);
       throw error;
     }
   }

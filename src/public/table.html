@@ -98,7 +98,7 @@
       <h1>WhatsApp Message Capture System</h1>
       <p>Monitor and view messages from WhatsApp groups</p>
       <nav>
-        <a href="/">Dashboard View</a> | 
+        <a href="/dashboard.html">Dashboard View</a> |
         <a href="/table.html" class="active">Table View</a> | 
         <a href="/qr">QR Code</a>
       </nav>
@@ -126,11 +126,11 @@
             <th>Group Name</th>
             <th>Sender Name</th>
             <th>Message Text</th>
-            <th>Image</th>
-            <th>Video</th>
-            <th>Audio</th>
-            <th>Document</th>
-            <th>Reply To</th>
+            <th hidden>Image</th>
+            <th hidden>Video</th>
+            <th hidden>Audio</th>
+            <th hidden>Document</th>
+            <th hidden>Reply To</th>
             <th>Date & Time</th>
           </tr>
         </thead>
@@ -177,7 +177,7 @@
       // Set up Socket.io event handlers
       setupSocketHandlers();
     });
-    
+
     /**
      * Load all messages from the API
      */
@@ -188,6 +188,7 @@
         
         // Process messages to ensure all fields are properly set
         messages = await response.json();
+
         messages = messages.map(message => {
           // Handle video attachments
           if (message.attachment_type === 'video') {
@@ -211,6 +212,13 @@
           }
           
           return message;
+        });
+
+        // Sort messages by timestamp (newest first)
+        messages.sort((a, b) => {
+          const timestampA = new Date(a.post_timestamp || a.timestamp || 0);
+          const timestampB = new Date(b.post_timestamp || b.timestamp || 0);
+          return timestampB - timestampA; // Newest first (descending order)
         });
         
         renderMessages(messages);
@@ -292,7 +300,10 @@
       // Apply search filter
       if (searchTerm) {
         filteredMessages = filteredMessages.filter(msg => 
+          (msg.post_snippet && msg.post_snippet.toLowerCase().includes(searchTerm)) || 
           (msg.message_text && msg.message_text.toLowerCase().includes(searchTerm)) || 
+          (msg.author_username && msg.author_username.toLowerCase().includes(searchTerm)) ||
+          (msg.author_name && msg.author_name.toLowerCase().includes(searchTerm)) ||
           (msg.sender_name && msg.sender_name.toLowerCase().includes(searchTerm)) ||
           (msg.group_name && msg.group_name.toLowerCase().includes(searchTerm)) ||
           (msg.reply_text && msg.reply_text.toLowerCase().includes(searchTerm))
@@ -306,7 +317,20 @@
      * Render messages in the table
      */
     function renderMessages(messageData) {
+
+        let filteredMessages = messageData;
+
+      // Filter to show only WhatsApp messages
+      filteredMessages = filteredMessages.filter(msg => {
+        if (!msg.source) return false;
+        const source = msg.source.toLowerCase();
+        return source === 'whatsapp';
+      });
+
+      console.log("FILTERED MESSAGES:", filteredMessages);
+
       // Clear table
+      console.log('Rendering messages:', filteredMessages);
       messageTableBody.innerHTML = '';
       
       if (messageData.length === 0) {
@@ -315,118 +339,182 @@
       }
       
       // Create message rows
-      messageData.forEach(message => {
+      filteredMessages.forEach(message => {
         const row = document.createElement('tr');
         
-        // Group name cell
+        // Group name cell - use author_name as group identifier
         const groupCell = document.createElement('td');
-        groupCell.textContent = message.group_name || 'Unknown Group';
+        groupCell.textContent = message.author_name || message.group_name || 'Unknown Group';
         row.appendChild(groupCell);
         
-        // Sender name cell
+        // Sender name cell - use author_username or author_name
         const senderCell = document.createElement('td');
-        senderCell.textContent = message.sender_name || 'Unknown';
+        senderCell.textContent = message.author_username || message.author_name || message.sender_name || 'Unknown';
         row.appendChild(senderCell);
         
-        // Message text cell
+        // Message text cell - use post_snippet or message_text
         const messageCell = document.createElement('td');
-        messageCell.textContent = message.message_text;
+        messageCell.textContent = message.post_snippet || message.message_text || '[Empty message]';
         row.appendChild(messageCell);
         
-        // Image attachment cell
-        const imageCell = document.createElement('td');
-        if (message.image_attachment_path) {
-          const imageLink = document.createElement('a');
-          imageLink.href = `/attachments/${message.image_attachment_path}`;
-          imageLink.target = '_blank';
-          
-          const thumbnail = document.createElement('img');
-          thumbnail.src = `/attachments/${message.image_attachment_path}`;
-          thumbnail.alt = 'Image attachment';
-          thumbnail.style.maxWidth = '50px';
-          thumbnail.style.maxHeight = '50px';
-          
-          imageLink.appendChild(thumbnail);
-          imageCell.appendChild(imageLink);
-        }
-        row.appendChild(imageCell);
+        // // Image attachment cell
+        // const imageCell = document.createElement('td');
+        // if (message.image_attachment_path) {
+        //   const imageLink = document.createElement('a');
+        //   imageLink.href = `/attachments/${message.image_attachment_path}`;
+        //   imageLink.target = '_blank';
+        //
+        //   const thumbnail = document.createElement('img');
+        //   thumbnail.src = `/attachments/${message.image_attachment_path}`;
+        //   thumbnail.alt = 'Image attachment';
+        //   thumbnail.style.maxWidth = '50px';
+        //   thumbnail.style.maxHeight = '50px';
+        //
+        //   imageLink.appendChild(thumbnail);
+        //   imageCell.appendChild(imageLink);
+        // } else if (message.commonAttachments && message.commonAttachments.length > 0) {
+        //   // Check for image attachments in commonAttachments
+        //   const imageAttachment = message.commonAttachments.find(att => att.attachment_type === 'image');
+        //   if (imageAttachment) {
+        //     const imageLink = document.createElement('a');
+        //     imageLink.href = `/attachments/${imageAttachment.attachment_path}`;
+        //     imageLink.target = '_blank';
+        //
+        //     const thumbnail = document.createElement('img');
+        //     thumbnail.src = `/attachments/${imageAttachment.attachment_path}`;
+        //     thumbnail.alt = 'Image attachment';
+        //     thumbnail.style.maxWidth = '50px';
+        //     thumbnail.style.maxHeight = '50px';
+        //
+        //     imageLink.appendChild(thumbnail);
+        //     imageCell.appendChild(imageLink);
+        //   }
+        // }
+        // row.appendChild(imageCell);
+        //
+        // // Video attachment cell
+        // const videoCell = document.createElement('td');
+        // if (message.video_attachment_path) {
+        //   const videoLink = document.createElement('a');
+        //   videoLink.href = `/attachments/${message.video_attachment_path}`;
+        //   videoLink.target = '_blank';
+        //
+        //   const videoThumbnail = document.createElement('div');
+        //   videoThumbnail.className = 'video-thumbnail';
+        //   videoThumbnail.innerHTML = '<svg width="40" height="40" viewBox="0 0 24 24"><path fill="currentColor" d="M8 5v14l11-7z"/></svg>';
+        //   videoThumbnail.title = 'Click to view video';
+        //
+        //   videoLink.appendChild(videoThumbnail);
+        //   videoCell.appendChild(videoLink);
+        // } else if (message.commonAttachments && message.commonAttachments.length > 0) {
+        //   // Check for video attachments in commonAttachments
+        //   const videoAttachment = message.commonAttachments.find(att => att.attachment_type === 'video');
+        //   if (videoAttachment) {
+        //     const videoLink = document.createElement('a');
+        //     videoLink.href = `/attachments/${videoAttachment.attachment_path}`;
+        //     videoLink.target = '_blank';
+        //
+        //     const videoThumbnail = document.createElement('div');
+        //     videoThumbnail.className = 'video-thumbnail';
+        //     videoThumbnail.innerHTML = '<svg width="40" height="40" viewBox="0 0 24 24"><path fill="currentColor" d="M8 5v14l11-7z"/></svg>';
+        //     videoThumbnail.title = 'Click to view video';
+        //
+        //     videoLink.appendChild(videoThumbnail);
+        //     videoCell.appendChild(videoLink);
+        //   }
+        // }
+        // row.appendChild(videoCell);
+        //
+        // // Audio attachment cell
+        // const audioCell = document.createElement('td');
+        // if (message.audio_attachment_path) {
+        //   const audioLink = document.createElement('a');
+        //   audioLink.href = `/attachments/${message.audio_attachment_path}`;
+        //   audioLink.target = '_blank';
+        //
+        //   const audioThumbnail = document.createElement('div');
+        //   audioThumbnail.className = 'audio-thumbnail';
+        //   audioThumbnail.innerHTML = '<svg width="40" height="40" viewBox="0 0 24 24"><path fill="currentColor" d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z"/></svg>';
+        //   audioThumbnail.title = 'Click to play audio';
+        //
+        //   audioLink.appendChild(audioThumbnail);
+        //   audioCell.appendChild(audioLink);
+        // } else if (message.commonAttachments && message.commonAttachments.length > 0) {
+        //   // Check for audio attachments in commonAttachments
+        //   const audioAttachment = message.commonAttachments.find(att => att.attachment_type === 'audio');
+        //   if (audioAttachment) {
+        //     const audioLink = document.createElement('a');
+        //     audioLink.href = `/attachments/${audioAttachment.attachment_path}`;
+        //     audioLink.target = '_blank';
+        //
+        //     const audioThumbnail = document.createElement('div');
+        //     audioThumbnail.className = 'audio-thumbnail';
+        //     audioThumbnail.innerHTML = '<svg width="40" height="40" viewBox="0 0 24 24"><path fill="currentColor" d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z"/></svg>';
+        //     audioThumbnail.title = 'Click to play audio';
+        //
+        //     audioLink.appendChild(audioThumbnail);
+        //     audioCell.appendChild(audioLink);
+        //   }
+        // }
+        // row.appendChild(audioCell);
+        //
+        // // Document attachment cell
+        // const docCell = document.createElement('td');
+        // if (message.document_attachment_path) {
+        //   const docLink = document.createElement('a');
+        //   docLink.href = `/attachments/${message.document_attachment_path}`;
+        //   docLink.target = '_blank';
+        //   docLink.textContent = 'View Document';
+        //   docCell.appendChild(docLink);
+        // } else if (message.commonAttachments && message.commonAttachments.length > 0) {
+        //   // Check for document attachments in commonAttachments
+        //   const docAttachment = message.commonAttachments.find(att => att.attachment_type === 'document');
+        //   if (docAttachment) {
+        //     const docLink = document.createElement('a');
+        //     docLink.href = `/attachments/${docAttachment.attachment_path}`;
+        //     docLink.target = '_blank';
+        //     docLink.textContent = 'View Document';
+        //     docCell.appendChild(docLink);
+        //   }
+        // }
+        // row.appendChild(docCell);
+        //
+        // // Reply text cell
+        // const replyCell = document.createElement('td');
+        // if (message.reply_text) {
+        //   replyCell.textContent = message.reply_text;
+        //
+        //   // If there's a reply attachment, add an icon or link
+        //   if (message.reply_attachment_path) {
+        //     const attachmentType = message.reply_attachment_type;
+        //     const attachmentIcon = document.createElement('span');
+        //     attachmentIcon.className = 'reply-attachment-icon';
+        //
+        //     if (attachmentType === 'image') {
+        //       attachmentIcon.innerHTML = ' 📷';
+        //     } else if (attachmentType === 'video') {
+        //       attachmentIcon.innerHTML = ' 🎥';
+        //     } else if (attachmentType === 'audio') {
+        //       attachmentIcon.innerHTML = ' 🎵';
+        //     } else if (attachmentType === 'document') {
+        //       attachmentIcon.innerHTML = ' 📄';
+        //     } else if (attachmentType === 'link') {
+        //       attachmentIcon.innerHTML = ' 🔗';
+        //     }
+        //
+        //     replyCell.appendChild(attachmentIcon);
+        //   }
+        // }
+        // row.appendChild(replyCell);
         
-        // Video attachment cell
-        const videoCell = document.createElement('td');
-        if (message.video_attachment_path) {
-          const videoLink = document.createElement('a');
-          videoLink.href = `/attachments/${message.video_attachment_path}`;
-          videoLink.target = '_blank';
-          
-          const videoThumbnail = document.createElement('div');
-          videoThumbnail.className = 'video-thumbnail';
-          videoThumbnail.innerHTML = '<svg width="40" height="40" viewBox="0 0 24 24"><path fill="currentColor" d="M8 5v14l11-7z"/></svg>';
-          videoThumbnail.title = 'Click to view video';
-          
-          videoLink.appendChild(videoThumbnail);
-          videoCell.appendChild(videoLink);
-        }
-        row.appendChild(videoCell);
-        
-        // Audio attachment cell
-        const audioCell = document.createElement('td');
-        if (message.audio_attachment_path) {
-          const audioLink = document.createElement('a');
-          audioLink.href = `/attachments/${message.audio_attachment_path}`;
-          audioLink.target = '_blank';
-          
-          const audioThumbnail = document.createElement('div');
-          audioThumbnail.className = 'audio-thumbnail';
-          audioThumbnail.innerHTML = '<svg width="40" height="40" viewBox="0 0 24 24"><path fill="currentColor" d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z"/></svg>';
-          audioThumbnail.title = 'Click to play audio';
-          
-          audioLink.appendChild(audioThumbnail);
-          audioCell.appendChild(audioLink);
-        }
-        row.appendChild(audioCell);
-        
-        // Document attachment cell
-        const docCell = document.createElement('td');
-        if (message.document_attachment_path) {
-          const docLink = document.createElement('a');
-          docLink.href = `/attachments/${message.document_attachment_path}`;
-          docLink.target = '_blank';
-          docLink.textContent = 'View Document';
-          docCell.appendChild(docLink);
-        }
-        row.appendChild(docCell);
-        
-        // Reply text cell
-        const replyCell = document.createElement('td');
-        if (message.reply_text) {
-          replyCell.textContent = message.reply_text;
-          
-          // If there's a reply attachment, add an icon or link
-          if (message.reply_attachment_path) {
-            const attachmentType = message.reply_attachment_type;
-            const attachmentIcon = document.createElement('span');
-            attachmentIcon.className = 'reply-attachment-icon';
-            
-            if (attachmentType === 'image') {
-              attachmentIcon.innerHTML = ' 📷';
-            } else if (attachmentType === 'video') {
-              attachmentIcon.innerHTML = ' 🎥';
-            } else if (attachmentType === 'audio') {
-              attachmentIcon.innerHTML = ' 🎵';
-            } else if (attachmentType === 'document') {
-              attachmentIcon.innerHTML = ' 📄';
-            } else if (attachmentType === 'link') {
-              attachmentIcon.innerHTML = ' 🔗';
-            }
-            
-            replyCell.appendChild(attachmentIcon);
-          }
-        }
-        row.appendChild(replyCell);
-        
-        // Date & time cell
+        // Date & time cell - use post_timestamp or timestamp
         const dateCell = document.createElement('td');
-        dateCell.textContent = formatDateTime(new Date(message.timestamp));
+        const timestamp = message.post_timestamp || message.timestamp;
+        if (timestamp) {
+          dateCell.textContent = formatDateTime(new Date(timestamp));
+        } else {
+          dateCell.textContent = 'Unknown date';
+        }
         row.appendChild(dateCell);
         
         messageTableBody.appendChild(row);

@@ -11,373 +11,528 @@
       border-collapse: collapse;
       margin-top: 20px;
     }
-    
+
     .message-table th, .message-table td {
       border: 1px solid #ddd;
       padding: 8px 12px;
       text-align: left;
     }
-    
+
     .message-table th {
       background-color: #f2f2f2;
       position: sticky;
       top: 0;
     }
-    
+
     .message-table tr:nth-child(even) {
       background-color: #f9f9f9;
     }
-    
+
     .message-table tr:hover {
       background-color: #f1f1f1;
     }
-    
+
     .table-container {
       max-height: 600px;
       overflow-y: auto;
       margin-top: 20px;
     }
-    
+
     .filter-container {
       display: flex;
+      flex-direction: column;
       gap: 15px;
       margin-bottom: 15px;
+      width: 100%;
+    }
+
+    .filter-row {
+      display: flex;
+      gap: 15px;
+      width: 100%;
+      justify-content: flex-start;
       align-items: center;
     }
-    
+
     .filter-container select, .filter-container input {
       padding: 8px;
       border: 1px solid #ddd;
       border-radius: 4px;
+      flex: 1;
+      max-width: 300px;
     }
-    
-    .connection-status-bar {
+
+    .filter-container label {
+      min-width: 120px;
+      font-weight: bold;
+    }
+
+    .video-thumbnail, .audio-thumbnail {
       display: flex;
       align-items: center;
-      gap: 8px;
-      margin: 10px 0;
-      padding: 8px 12px;
-      background-color: #f8f9fa;
-      border-radius: 6px;
-      border: 1px solid #e9ecef;
+      justify-content: center;
+      width: 50px;
+      height: 50px;
+      background-color: #f0f0f0;
+      border-radius: 4px;
+      cursor: pointer;
     }
-    
-    .status-indicator {
-      width: 12px;
-      height: 12px;
-      border-radius: 50%;
-      background-color: #6c757d;
+
+    .video-thumbnail svg, .audio-thumbnail svg {
+      color: #075e54;
     }
-    
-    .status-indicator.connecting {
-      background-color: #ffc107;
-      animation: pulse 1.5s infinite;
+
+    .video-thumbnail:hover, .audio-thumbnail:hover {
+      background-color: #e0e0e0;
     }
-    
-    .status-indicator.connected {
-      background-color: #28a745;
-    }
-    
-    .status-indicator.error {
-      background-color: #dc3545;
-    }
-    
-    @keyframes pulse {
-      0% { opacity: 1; }
-      50% { opacity: 0.5; }
-      100% { opacity: 1; }
-    }
-    
-    #connection-text {
-      font-size: 14px;
-      color: #495057;
-      font-weight: 500;
+
+    .reply-attachment-icon {
+      margin-left: 5px;
+      font-size: 16px;
     }
   </style>
 </head>
 <body>
-  <div class="container">
-    <header>
-      <h1>WhatsApp Message Capture System</h1>
-      <p>Monitor and view messages from WhatsApp groups</p>
-      <div class="connection-status-bar">
-        <div class="status-indicator" id="connection-indicator"></div>
-        <span id="connection-text">Checking connection...</span>
-      </div>
-      <nav>
-        <a href="/" class="active">Table View</a> | 
-        <a href="/dashboard.html">Dashboard View</a> | 
-        <a href="/qr">QR Code</a>
-      </nav>
-    </header>
+<div class="container">
+  <header>
+    <h1>WhatsApp Message Capture System</h1>
+    <p>Monitor and view messages from WhatsApp groups</p>
+    <nav>
+      <a href="/dashboard.html">Dashboard View</a> |
+      <a href="/table.html" class="active">Table View</a> |
+      <a href="/qr">QR Code</a>
+    </nav>
+  </header>
 
-    <div class="main-content">
-      <div class="filter-container">
+  <div class="main-content">
+    <div class="filter-container">
+      <div class="filter-row">
+        <label for="group-filter">Filter by Group:</label>
         <select id="group-filter">
           <option value="all">All Groups</option>
           <!-- Groups will be populated here -->
         </select>
+      </div>
+      <div class="filter-row">
+        <label for="search-input">Search:</label>
         <input type="text" id="search-input" placeholder="Search messages...">
       </div>
-      
-      <div class="table-container">
-        <table class="message-table">
-          <thead>
-            <tr>
-              <th>Group Name</th>
-              <th>Sender Name</th>
-              <th>Message Text</th>
-              <th>Date & Time</th>
-            </tr>
-          </thead>
-          <tbody id="message-table-body">
-            <!-- Messages will be populated here -->
-            <tr>
-              <td colspan="4" class="loading">Loading messages...</td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
+    </div>
+
+    <div class="table-container">
+      <table class="message-table">
+        <thead>
+        <tr>
+          <th>Group Name</th>
+          <th>Sender Name</th>
+          <th>Message Text</th>
+          <th hidden>Image</th>
+          <th hidden>Video</th>
+          <th hidden>Audio</th>
+          <th hidden>Document</th>
+          <th hidden>Reply To</th>
+          <th>Date & Time</th>
+        </tr>
+        </thead>
+        <tbody id="message-table-body">
+        <!-- Messages will be populated here -->
+        <tr>
+          <td colspan="9" class="loading">Loading messages...</td>
+        </tr>
+        </tbody>
+      </table>
     </div>
   </div>
+</div>
 
-  <!-- Socket.io client -->
-  <script src="/socket.io/socket.io.js"></script>
-  <!-- Table View JavaScript -->
-  <script>
-    // Connect to Socket.io server
-    const socket = io();
-    
-    // DOM elements
-    const messageTableBody = document.getElementById('message-table-body');
-    const groupFilter = document.getElementById('group-filter');
-    const searchInput = document.getElementById('search-input');
-    
-    // State
-    let messages = [];
-    let groups = [];
-    let currentFilter = 'all';
-    let searchTerm = '';
-    
-    // Initialize the application
-    document.addEventListener('DOMContentLoaded', () => {
-      // Load messages
-      loadMessages();
-      
-      // Load groups for filter
-      loadGroups();
-      
-      // Check initial WhatsApp connection status
-      checkWhatsAppStatus();
-      
-      // Set up event listeners
-      setupEventListeners();
-      
-      // Set up Socket.io event handlers
-      setupSocketHandlers();
+<!-- Socket.io client -->
+<script src="/socket.io/socket.io.js"></script>
+<!-- Table View JavaScript -->
+<script>
+  // Connect to Socket.io server
+  const socket = io();
+
+  // DOM elements
+  const messageTableBody = document.getElementById('message-table-body');
+  const groupFilter = document.getElementById('group-filter');
+  const searchInput = document.getElementById('search-input');
+
+  // State
+  let messages = [];
+  let groups = [];
+  let currentFilter = 'all';
+  let searchTerm = '';
+
+  // Initialize the application
+  document.addEventListener('DOMContentLoaded', () => {
+    // Load messages
+    loadMessages();
+
+    // Load groups for filter
+    loadGroups();
+
+    // Set up event listeners
+    setupEventListeners();
+
+    // Set up Socket.io event handlers
+    setupSocketHandlers();
+  });
+
+  /**
+   * Load all messages from the API
+   */
+  async function loadMessages() {
+    try {
+      const response = await fetch('/api/messages');
+      if (!response.ok) throw new Error('Failed to fetch messages');
+
+      // Process messages to ensure all fields are properly set
+      messages = await response.json();
+
+      messages = messages.map(message => {
+        // Handle video attachments
+        if (message.attachment_type === 'video') {
+          message.video_attachment_path = message.attachment_path;
+        }
+
+        // Handle audio attachments
+        if (message.attachment_type === 'audio') {
+          message.audio_attachment_path = message.attachment_path;
+        }
+
+        // Ensure reply data is accessible
+        if (message.reply_to_message_id) {
+          // Make sure reply_text is available
+          message.reply_text = message.reply_text || '';
+
+          // Set reply attachment info if available
+          if (message.reply_attachment_path) {
+            message.reply_attachment_type = message.reply_attachment_type || 'document';
+          }
+        }
+
+        return message;
+      });
+
+      // Sort messages by timestamp (newest first)
+      messages.sort((a, b) => {
+        const timestampA = new Date(a.post_timestamp || a.timestamp || 0);
+        const timestampB = new Date(b.post_timestamp || b.timestamp || 0);
+        return timestampB - timestampA; // Newest first (descending order)
+      });
+
+      renderMessages(messages);
+    } catch (error) {
+      console.error('Error loading messages:', error);
+      messageTableBody.innerHTML = '<tr><td colspan="8" class="error">Failed to load messages</td></tr>';
+    }
+  }
+
+  /**
+   * Load all groups from the API
+   */
+  async function loadGroups() {
+    try {
+      const response = await fetch('/api/groups');
+      if (!response.ok) throw new Error('Failed to fetch groups');
+
+      groups = await response.json();
+      populateGroupFilter(groups);
+    } catch (error) {
+      console.error('Error loading groups:', error);
+    }
+  }
+
+  /**
+   * Populate group filter dropdown
+   */
+  function populateGroupFilter(groupsData) {
+    groupsData.forEach(group => {
+      const option = document.createElement('option');
+      option.value = group.group_id;
+      option.textContent = group.group_name || 'Unknown Group';
+      groupFilter.appendChild(option);
     });
-    
-    /**
-     * Load all messages from the API
-     */
-    async function loadMessages() {
-      try {
-        const response = await fetch('/api/messages');
-        if (!response.ok) throw new Error('Failed to fetch messages');
-        
-        messages = await response.json();
-        renderMessages(messages);
-      } catch (error) {
-        console.error('Error loading messages:', error);
-        messageTableBody.innerHTML = '<tr><td colspan="4" class="error">Failed to load messages</td></tr>';
-      }
+  }
+
+  /**
+   * Set up event listeners
+   */
+  function setupEventListeners() {
+    // Group filter change
+    groupFilter.addEventListener('change', () => {
+      currentFilter = groupFilter.value;
+      filterMessages();
+    });
+
+    // Search input
+    searchInput.addEventListener('input', () => {
+      searchTerm = searchInput.value.toLowerCase();
+      filterMessages();
+    });
+  }
+
+  /**
+   * Set up Socket.io event handlers
+   */
+  function setupSocketHandlers() {
+    // New message event
+    socket.on('new_message', (message) => {
+      // Add new message to the array
+      messages.unshift(message);
+
+      // Re-render messages with filters applied
+      filterMessages();
+    });
+  }
+
+  /**
+   * Filter messages based on current filter and search term
+   */
+  function filterMessages() {
+    let filteredMessages = messages;
+
+    // Apply group filter
+    if (currentFilter !== 'all') {
+      filteredMessages = filteredMessages.filter(msg => msg.group_id === currentFilter);
     }
-    
-    /**
-     * Load all groups from the API
-     */
-    async function loadGroups() {
-      try {
-        const response = await fetch('/api/groups');
-        if (!response.ok) throw new Error('Failed to fetch groups');
-        
-        groups = await response.json();
-        populateGroupFilter(groups);
-      } catch (error) {
-        console.error('Error loading groups:', error);
-      }
+
+    // Apply search filter
+    if (searchTerm) {
+      filteredMessages = filteredMessages.filter(msg =>
+              (msg.post_snippet && msg.post_snippet.toLowerCase().includes(searchTerm)) ||
+              (msg.message_text && msg.message_text.toLowerCase().includes(searchTerm)) ||
+              (msg.author_username && msg.author_username.toLowerCase().includes(searchTerm)) ||
+              (msg.author_name && msg.author_name.toLowerCase().includes(searchTerm)) ||
+              (msg.sender_name && msg.sender_name.toLowerCase().includes(searchTerm)) ||
+              (msg.group_name && msg.group_name.toLowerCase().includes(searchTerm)) ||
+              (msg.reply_text && msg.reply_text.toLowerCase().includes(searchTerm))
+      );
     }
-    
-    /**
-     * Populate group filter dropdown
-     */
-    function populateGroupFilter(groupsData) {
-      groupsData.forEach(group => {
-        const option = document.createElement('option');
-        option.value = group.group_id;
-        option.textContent = group.group_name || 'Unknown Group';
-        groupFilter.appendChild(option);
-      });
+
+    renderMessages(filteredMessages);
+  }
+
+  /**
+   * Render messages in the table
+   */
+  function renderMessages(messageData) {
+
+    let filteredMessages = messageData;
+
+    // Filter to show only WhatsApp messages
+    filteredMessages = filteredMessages.filter(msg => {
+      if (!msg.source) return false;
+      const source = msg.source.toLowerCase();
+      return source === 'whatsapp';
+    });
+
+    console.log("FILTERED MESSAGES:", filteredMessages);
+
+    // Clear table
+    console.log('Rendering messages:', filteredMessages);
+    messageTableBody.innerHTML = '';
+
+    if (messageData.length === 0) {
+      messageTableBody.innerHTML = '<tr><td colspan="9" class="no-messages">No messages found</td></tr>';
+      return;
     }
-    
-    /**
-     * Set up event listeners
-     */
-    function setupEventListeners() {
-      // Group filter change
-      groupFilter.addEventListener('change', () => {
-        currentFilter = groupFilter.value;
-        filterMessages();
-      });
-      
-      // Search input
-      searchInput.addEventListener('input', () => {
-        searchTerm = searchInput.value.toLowerCase();
-        filterMessages();
-      });
-    }
-    
-    /**
-     * Set up Socket.io event handlers
-     */
-    function setupSocketHandlers() {
-      // New message event
-      socket.on('new-message', (message) => {
-        // Add new message to the array
-        messages.unshift(message);
-        
-        // Re-render messages with filters applied
-        filterMessages();
-      });
-      
-      // WhatsApp status update event
-      socket.on('whatsapp-status-update', (status) => {
-        updateConnectionStatus(status);
-      });
-    }
-    
-    /**
-     * Filter messages based on current filter and search term
-     */
-    function filterMessages() {
-      let filteredMessages = messages;
-      
-      // Apply group filter
-      if (currentFilter !== 'all') {
-        filteredMessages = filteredMessages.filter(msg => msg.group_id === currentFilter);
-      }
-      
-      // Apply search filter
-      if (searchTerm) {
-        filteredMessages = filteredMessages.filter(msg => 
-          msg.message_text.toLowerCase().includes(searchTerm) || 
-          msg.sender_name.toLowerCase().includes(searchTerm) ||
-          msg.group_name.toLowerCase().includes(searchTerm)
-        );
-      }
-      
-      renderMessages(filteredMessages);
-    }
-    
-    /**
-     * Render messages in the table
-     */
-    function renderMessages(messageData) {
-      // Clear table
-      messageTableBody.innerHTML = '';
-      
-      if (messageData.length === 0) {
-        messageTableBody.innerHTML = '<tr><td colspan="4" class="no-messages">No messages found</td></tr>';
-        return;
-      }
-      
-      // Create message rows
-      messageData.forEach(message => {
-        const row = document.createElement('tr');
-        
-        // Group name cell
-        const groupCell = document.createElement('td');
-        groupCell.textContent = message.group_name || 'Unknown Group';
-        row.appendChild(groupCell);
-        
-        // Sender name cell
-        const senderCell = document.createElement('td');
-        senderCell.textContent = message.sender_name || 'Unknown';
-        row.appendChild(senderCell);
-        
-        // Message text cell
-        const messageCell = document.createElement('td');
-        messageCell.textContent = message.message_text;
-        row.appendChild(messageCell);
-        
-        // Date & time cell
-        const dateCell = document.createElement('td');
-        dateCell.textContent = formatDateTime(new Date(message.timestamp));
-        row.appendChild(dateCell);
-        
-        messageTableBody.appendChild(row);
-      });
-    }
-    
-    /**
-     * Format date and time as dd/mm/yyyy HH:MM
-     */
-    function formatDateTime(date) {
-      const day = String(date.getDate()).padStart(2, '0');
-      const month = String(date.getMonth() + 1).padStart(2, '0');
-      const year = date.getFullYear();
-      const hours = String(date.getHours()).padStart(2, '0');
-      const minutes = String(date.getMinutes()).padStart(2, '0');
-      
-      return `${day}/${month}/${year} ${hours}:${minutes}`;
-    }
-    
-    /**
-     * Check WhatsApp connection status
-     */
-    async function checkWhatsAppStatus() {
-      try {
-        const response = await fetch('/api/whatsapp/status');
-        if (!response.ok) throw new Error('Failed to fetch status');
-        
-        const status = await response.json();
-        updateConnectionStatus(status);
-      } catch (error) {
-        console.error('Error checking WhatsApp status:', error);
-        updateConnectionStatus({
-          isAuthenticated: false,
-          isReady: false,
-          message: 'Connection check failed'
-        });
-      }
-    }
-    
-    /**
-     * Update connection status display
-     */
-    function updateConnectionStatus(status) {
-      const indicator = document.getElementById('connection-indicator');
-      const text = document.getElementById('connection-text');
-      
-      if (!indicator || !text) return; // Elements don't exist on this page
-      
-      // Clear existing classes
-      indicator.className = 'status-indicator';
-      
-      if (status.isAuthenticated && status.isReady) {
-        indicator.classList.add('connected');
-        text.textContent = `Connected as: ${status.businessNumber || 'WhatsApp User'}`;
-      } else if (status.isAuthenticated && !status.isReady) {
-        indicator.classList.add('connecting');
-        text.textContent = 'WhatsApp authenticated, initializing...';
-      } else if (status.qrCode) {
-        indicator.classList.add('connecting');
-        text.textContent = 'Scan QR code to authenticate';
+
+    // Create message rows
+    filteredMessages.forEach(message => {
+      const row = document.createElement('tr');
+
+      // Group name cell - use author_name as group identifier
+      const groupCell = document.createElement('td');
+      groupCell.textContent = message.author_name || message.group_name || 'Unknown Group';
+      row.appendChild(groupCell);
+
+      // Sender name cell - use author_username or author_name
+      const senderCell = document.createElement('td');
+      senderCell.textContent = message.author_username || message.author_name || message.sender_name || 'Unknown';
+      row.appendChild(senderCell);
+
+      // Message text cell - use post_snippet or message_text
+      const messageCell = document.createElement('td');
+      messageCell.textContent = message.post_snippet || message.message_text || '[Empty message]';
+      row.appendChild(messageCell);
+
+      // // Image attachment cell
+      // const imageCell = document.createElement('td');
+      // if (message.image_attachment_path) {
+      //   const imageLink = document.createElement('a');
+      //   imageLink.href = `/attachments/${message.image_attachment_path}`;
+      //   imageLink.target = '_blank';
+      //
+      //   const thumbnail = document.createElement('img');
+      //   thumbnail.src = `/attachments/${message.image_attachment_path}`;
+      //   thumbnail.alt = 'Image attachment';
+      //   thumbnail.style.maxWidth = '50px';
+      //   thumbnail.style.maxHeight = '50px';
+      //
+      //   imageLink.appendChild(thumbnail);
+      //   imageCell.appendChild(imageLink);
+      // } else if (message.commonAttachments && message.commonAttachments.length > 0) {
+      //   // Check for image attachments in commonAttachments
+      //   const imageAttachment = message.commonAttachments.find(att => att.attachment_type === 'image');
+      //   if (imageAttachment) {
+      //     const imageLink = document.createElement('a');
+      //     imageLink.href = `/attachments/${imageAttachment.attachment_path}`;
+      //     imageLink.target = '_blank';
+      //
+      //     const thumbnail = document.createElement('img');
+      //     thumbnail.src = `/attachments/${imageAttachment.attachment_path}`;
+      //     thumbnail.alt = 'Image attachment';
+      //     thumbnail.style.maxWidth = '50px';
+      //     thumbnail.style.maxHeight = '50px';
+      //
+      //     imageLink.appendChild(thumbnail);
+      //     imageCell.appendChild(imageLink);
+      //   }
+      // }
+      // row.appendChild(imageCell);
+      //
+      // // Video attachment cell
+      // const videoCell = document.createElement('td');
+      // if (message.video_attachment_path) {
+      //   const videoLink = document.createElement('a');
+      //   videoLink.href = `/attachments/${message.video_attachment_path}`;
+      //   videoLink.target = '_blank';
+      //
+      //   const videoThumbnail = document.createElement('div');
+      //   videoThumbnail.className = 'video-thumbnail';
+      //   videoThumbnail.innerHTML = '<svg width="40" height="40" viewBox="0 0 24 24"><path fill="currentColor" d="M8 5v14l11-7z"/></svg>';
+      //   videoThumbnail.title = 'Click to view video';
+      //
+      //   videoLink.appendChild(videoThumbnail);
+      //   videoCell.appendChild(videoLink);
+      // } else if (message.commonAttachments && message.commonAttachments.length > 0) {
+      //   // Check for video attachments in commonAttachments
+      //   const videoAttachment = message.commonAttachments.find(att => att.attachment_type === 'video');
+      //   if (videoAttachment) {
+      //     const videoLink = document.createElement('a');
+      //     videoLink.href = `/attachments/${videoAttachment.attachment_path}`;
+      //     videoLink.target = '_blank';
+      //
+      //     const videoThumbnail = document.createElement('div');
+      //     videoThumbnail.className = 'video-thumbnail';
+      //     videoThumbnail.innerHTML = '<svg width="40" height="40" viewBox="0 0 24 24"><path fill="currentColor" d="M8 5v14l11-7z"/></svg>';
+      //     videoThumbnail.title = 'Click to view video';
+      //
+      //     videoLink.appendChild(videoThumbnail);
+      //     videoCell.appendChild(videoLink);
+      //   }
+      // }
+      // row.appendChild(videoCell);
+      //
+      // // Audio attachment cell
+      // const audioCell = document.createElement('td');
+      // if (message.audio_attachment_path) {
+      //   const audioLink = document.createElement('a');
+      //   audioLink.href = `/attachments/${message.audio_attachment_path}`;
+      //   audioLink.target = '_blank';
+      //
+      //   const audioThumbnail = document.createElement('div');
+      //   audioThumbnail.className = 'audio-thumbnail';
+      //   audioThumbnail.innerHTML = '<svg width="40" height="40" viewBox="0 0 24 24"><path fill="currentColor" d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z"/></svg>';
+      //   audioThumbnail.title = 'Click to play audio';
+      //
+      //   audioLink.appendChild(audioThumbnail);
+      //   audioCell.appendChild(audioLink);
+      // } else if (message.commonAttachments && message.commonAttachments.length > 0) {
+      //   // Check for audio attachments in commonAttachments
+      //   const audioAttachment = message.commonAttachments.find(att => att.attachment_type === 'audio');
+      //   if (audioAttachment) {
+      //     const audioLink = document.createElement('a');
+      //     audioLink.href = `/attachments/${audioAttachment.attachment_path}`;
+      //     audioLink.target = '_blank';
+      //
+      //     const audioThumbnail = document.createElement('div');
+      //     audioThumbnail.className = 'audio-thumbnail';
+      //     audioThumbnail.innerHTML = '<svg width="40" height="40" viewBox="0 0 24 24"><path fill="currentColor" d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z"/></svg>';
+      //     audioThumbnail.title = 'Click to play audio';
+      //
+      //     audioLink.appendChild(audioThumbnail);
+      //     audioCell.appendChild(audioLink);
+      //   }
+      // }
+      // row.appendChild(audioCell);
+      //
+      // // Document attachment cell
+      // const docCell = document.createElement('td');
+      // if (message.document_attachment_path) {
+      //   const docLink = document.createElement('a');
+      //   docLink.href = `/attachments/${message.document_attachment_path}`;
+      //   docLink.target = '_blank';
+      //   docLink.textContent = 'View Document';
+      //   docCell.appendChild(docLink);
+      // } else if (message.commonAttachments && message.commonAttachments.length > 0) {
+      //   // Check for document attachments in commonAttachments
+      //   const docAttachment = message.commonAttachments.find(att => att.attachment_type === 'document');
+      //   if (docAttachment) {
+      //     const docLink = document.createElement('a');
+      //     docLink.href = `/attachments/${docAttachment.attachment_path}`;
+      //     docLink.target = '_blank';
+      //     docLink.textContent = 'View Document';
+      //     docCell.appendChild(docLink);
+      //   }
+      // }
+      // row.appendChild(docCell);
+      //
+      // // Reply text cell
+      // const replyCell = document.createElement('td');
+      // if (message.reply_text) {
+      //   replyCell.textContent = message.reply_text;
+      //
+      //   // If there's a reply attachment, add an icon or link
+      //   if (message.reply_attachment_path) {
+      //     const attachmentType = message.reply_attachment_type;
+      //     const attachmentIcon = document.createElement('span');
+      //     attachmentIcon.className = 'reply-attachment-icon';
+      //
+      //     if (attachmentType === 'image') {
+      //       attachmentIcon.innerHTML = ' 📷';
+      //     } else if (attachmentType === 'video') {
+      //       attachmentIcon.innerHTML = ' 🎥';
+      //     } else if (attachmentType === 'audio') {
+      //       attachmentIcon.innerHTML = ' 🎵';
+      //     } else if (attachmentType === 'document') {
+      //       attachmentIcon.innerHTML = ' 📄';
+      //     } else if (attachmentType === 'link') {
+      //       attachmentIcon.innerHTML = ' 🔗';
+      //     }
+      //
+      //     replyCell.appendChild(attachmentIcon);
+      //   }
+      // }
+      // row.appendChild(replyCell);
+
+      // Date & time cell - use post_timestamp or timestamp
+      const dateCell = document.createElement('td');
+      const timestamp = message.post_timestamp || message.timestamp;
+      if (timestamp) {
+        dateCell.textContent = formatDateTime(new Date(timestamp));
       } else {
-        indicator.classList.add('connecting');
-        text.textContent = status.message || 'Waiting for connection...';
+        dateCell.textContent = 'Unknown date';
       }
-    }
-  </script>
+      row.appendChild(dateCell);
+
+      messageTableBody.appendChild(row);
+    });
+  }
+
+  /**
+   * Format date and time as dd/mm/yyyy HH:MM
+   */
+  function formatDateTime(date) {
+    const day = String(date.getDate()).padStart(2, '0');
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const year = date.getFullYear();
+    const hours = String(date.getHours()).padStart(2, '0');
+    const minutes = String(date.getMinutes()).padStart(2, '0');
+
+    return `${day}/${month}/${year} ${hours}:${minutes}`;
+  }
+</script>
 </body>
 </html>

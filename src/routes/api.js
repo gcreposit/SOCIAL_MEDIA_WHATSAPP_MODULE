@@ -38,10 +38,10 @@ module.exports = function(dbService, documentViewerService = null) {
       const offset = parseInt(req.query.offset) || 0;
       
       const messages = await dbService.getMessagesByGroup(groupId, limit, offset);
-      res.json(messages);
+      res.json({ success: true, messages: messages });
     } catch (error) {
       console.error('Error fetching messages by group:', error);
-      res.status(500).json({ error: 'Failed to fetch messages' });
+      res.status(500).json({ success: false, error: 'Failed to fetch messages' });
     }
   });
 
@@ -116,6 +116,81 @@ module.exports = function(dbService, documentViewerService = null) {
       console.error('Error refreshing QR code:', error);
       res.status(500).json({ 
         error: 'Failed to refresh QR code' 
+      });
+    }
+  });
+
+  /**
+   * Force WhatsApp session logout and cleanup
+   * POST /api/whatsapp/force-logout
+   */
+  router.post('/whatsapp/force-logout', async (req, res) => {
+    try {
+      const whatsappClient = global.app?.whatsappClient;
+      
+      if (!whatsappClient) {
+        return res.status(400).json({
+          error: 'WhatsApp client not initialized'
+        });
+      }
+      
+      console.log('API: Force logout requested');
+      await whatsappClient.forceSessionExpiry();
+      
+      res.json({ 
+        success: true, 
+        message: 'WhatsApp session has been forcefully cleared. Please scan QR code to reconnect.' 
+      });
+    } catch (error) {
+      console.error('Error forcing WhatsApp logout:', error);
+      res.status(500).json({ 
+        error: 'Failed to force logout' 
+      });
+    }
+  });
+
+  /**
+   * Get WhatsApp session expiry status
+   * GET /api/whatsapp/session-status
+   */
+  router.get('/whatsapp/session-status', async (req, res) => {
+    try {
+      const whatsappClient = global.app?.whatsappClient;
+      
+      if (!whatsappClient) {
+        return res.status(400).json({
+          error: 'WhatsApp client not initialized'
+        });
+      }
+      
+      const sessionCreatedAt = whatsappClient.sessionCreatedAt;
+      const sessionExpiryDays = whatsappClient.sessionExpiryDays;
+      
+      if (!sessionCreatedAt) {
+        return res.json({
+          sessionActive: false,
+          message: 'No active session found'
+        });
+      }
+      
+      const now = new Date();
+      const sessionAge = Math.floor((now - sessionCreatedAt) / (1000 * 60 * 60 * 24));
+      const daysRemaining = Math.max(0, sessionExpiryDays - sessionAge);
+      const expiryDate = new Date(sessionCreatedAt.getTime() + (sessionExpiryDays * 24 * 60 * 60 * 1000));
+      
+      res.json({
+        sessionActive: true,
+        sessionCreatedAt: sessionCreatedAt.toISOString(),
+        sessionExpiryDays,
+        sessionAge,
+        daysRemaining,
+        expiryDate: expiryDate.toISOString(),
+        willExpireToday: daysRemaining === 0
+      });
+    } catch (error) {
+      console.error('Error getting session status:', error);
+      res.status(500).json({ 
+        error: 'Failed to get session status' 
       });
     }
   });

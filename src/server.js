@@ -76,7 +76,7 @@ class Server {
     
     // Main route (Table View)
     this.app.get('/', (req, res) => {
-      res.sendFile(path.join(__dirname, 'public', 'index.html'));
+      res.sendFile(path.join(__dirname, 'public', 'table.html'));
     });
     
     // Dashboard view route
@@ -84,10 +84,10 @@ class Server {
       res.sendFile(path.join(__dirname, 'public', 'dashboard.html'));
     });
     
-    // Table view route
-    this.app.get('/table', (req, res) => {
-      res.sendFile(path.join(__dirname, 'public', 'table.html'));
-    });
+    // // Table view route
+    // this.app.get('/table', (req, res) => {
+    //   res.sendFile(path.join(__dirname, 'public', 'table.html'));
+    // });
     
     // QR code authentication route
     this.app.get('/qr', (req, res) => {

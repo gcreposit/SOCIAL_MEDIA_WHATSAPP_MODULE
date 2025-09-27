@@ -122,20 +122,16 @@ function createGroupElement(group) {
  */
 async function loadMessages(groupId) {
   try {
-    // Show loading state
-    messagesContainer.innerHTML = '<div class="loading">Loading messages...</div>';
-
     const response = await fetch(`/api/messages/${groupId}`);
-    if (!response.ok) throw new Error('Failed to fetch messages');
-
-    const messages = await response.json();
-    renderMessages(messages);
-
-    // Update message count
-    messageCountDisplay.textContent = `${messages.length} messages`;
+    const data = await response.json();
+    
+    if (data.success) {
+      renderMessages(data.messages);
+    } else {
+      console.error('Failed to load messages:', data.error);
+    }
   } catch (error) {
     console.error('Error loading messages:', error);
-    messagesContainer.innerHTML = '<div class="error">Failed to load messages</div>';
   }
 }
 
@@ -144,27 +140,25 @@ async function loadMessages(groupId) {
  * @param {Array} messages - Array of message objects
  */
 function renderMessages(messages) {
-  // Clear messages container
+  const messagesContainer = document.getElementById('messages-container');
   messagesContainer.innerHTML = '';
-
+  
   if (messages.length === 0) {
-    messagesContainer.innerHTML = '<div class="no-messages">No messages in this group</div>';
+    messagesContainer.innerHTML = '<p class="no-messages">No messages found</p>';
     return;
   }
-
+  
   // Sort messages by timestamp (newest first)
-  messages.sort((a, b) => {
-    return new Date(b.timestamp) - new Date(a.timestamp);
+  const sortedMessages = messages.sort((a, b) => {
+    const timestampA = new Date(a.post_timestamp || a.timestamp || 0);
+    const timestampB = new Date(b.post_timestamp || b.timestamp || 0);
+    return timestampB - timestampA; // Newest first (descending order)
   });
-
-  // Create message elements
-  messages.forEach(message => {
+  
+  sortedMessages.forEach(message => {
     const messageElement = createMessageElement(message);
     messagesContainer.appendChild(messageElement);
   });
-
-  // Scroll to top (newest messages)
-  messagesContainer.scrollTop = 0;
 }
 
 /**
@@ -248,27 +242,58 @@ function renderMessages(messages) {
 function createMessageElement(message) {
   const messageElement = document.importNode(messageTemplate.content, true).querySelector('.message');
 
-  // Set message data
-  messageElement.querySelector('.sender-name').textContent = message.sender_name;
-  messageElement.querySelector('.timestamp').textContent = formatDate(new Date(message.timestamp));
+  // Set message data with better fallbacks
+  const senderName = message.author_username || message.author_name || message.sender_name || 'Unknown';
+  const messageText = message.post_snippet || message.message_text || '[Empty message]';
+  const timestamp = message.post_timestamp || message.timestamp;
+
+  // Debug logging
+  console.log('Creating message element:', {
+    senderName,
+    messageText,
+    timestamp,
+    originalMessage: message
+  });
+
+  messageElement.querySelector('.sender-name').textContent = senderName;
+  messageElement.querySelector('.timestamp').textContent = formatDate(timestamp);
 
   const messageBody = messageElement.querySelector('.message-body');
-  messageBody.textContent = message.message_text;
+  messageBody.textContent = messageText;
 
-  // Add reply attachment if present
-  if (message.reply_attachment_path && message.reply_attachment_type) {
-    const replyAttachment = createReplyAttachmentElement(
-        message.reply_attachment_path,
-        message.reply_attachment_type,
-        message.reply_text
-    );
-    if (replyAttachment) {
-      // Prepend reply to keep it visually grouped with the message text it's replying to
-      messageBody.prepend(replyAttachment);
-    }
+  // Add reply information if present (using correct PostBank field names)
+  if (message.reply_to_message_id && message.reply_text) {
+    const replyElement = document.createElement('div');
+    replyElement.className = 'reply-info';
+    replyElement.innerHTML = `
+      <div class="reply-header">
+        <i class="reply-icon">↳</i>
+        <span class="reply-label">Replying to:</span>
+      </div>
+      <div class="reply-content">${escapeHtml(message.reply_text)}</div>
+    `;
+    
+    // Add some basic styling
+    replyElement.style.cssText = `
+      background: #f0f0f0;
+      border-left: 3px solid #007bff;
+      padding: 8px 12px;
+      margin-bottom: 8px;
+      border-radius: 4px;
+      font-size: 0.9em;
+      color: #666;
+    `;
+    
+    // Prepend reply to keep it visually grouped with the message text it's replying to
+    messageBody.prepend(replyElement);
   }
 
-  // Consolidate all attachment types into a single array
+  // Handle both old and new attachment structures
+  const attachmentsDiv = document.createElement('div');
+  attachmentsDiv.className = 'message-attachments';
+  let hasAttachments = false;
+
+  // Check for direct attachment fields (old structure)
   const attachmentPaths = [
     { path: message.image_attachment_path, type: 'Image' },
     { path: message.document_attachment_path, type: 'Document' },
@@ -276,19 +301,53 @@ function createMessageElement(message) {
     { path: message.audio_attachment_path, type: 'Audio' }
   ].filter(att => att.path);
 
-  // If there are any attachments, create a container and add them
   if (attachmentPaths.length > 0) {
-    const attachmentsDiv = document.createElement('div');
-    attachmentsDiv.className = 'message-attachments';
-
     attachmentPaths.forEach(att => {
-      const attachmentElement = createAttachmentElement(att.path, att.type, message.message_text);
+      const attachmentElement = createAttachmentElement(att.path, att.type, message.post_snippet || message.message_text || '');
       if (attachmentElement) {
         attachmentsDiv.appendChild(attachmentElement);
+        hasAttachments = true;
       }
     });
+  }
 
-    // Append the single container for all attachments to the message body
+  // Handle new CommonAttachment structure
+  if (message.commonAttachments && message.commonAttachments.length > 0) {
+    message.commonAttachments.forEach(attachment => {
+      // Get the correct attachment path based on type
+      let attachmentPath = null;
+      let attachmentType = attachment.attachment_type;
+      
+      if (attachment.image_attachment_path) {
+        attachmentPath = attachment.image_attachment_path;
+        attachmentType = 'image';
+      } else if (attachment.document_attachment_path) {
+        attachmentPath = attachment.document_attachment_path;
+        attachmentType = 'document';
+      } else if (attachment.video_attachment_path) {
+        attachmentPath = attachment.video_attachment_path;
+        attachmentType = 'video';
+      } else if (attachment.audio_attachment_path) {
+        attachmentPath = attachment.audio_attachment_path;
+        attachmentType = 'audio';
+      }
+      
+      if (attachmentPath) {
+        const attachmentElement = createAttachmentElement(
+          attachmentPath, 
+          attachmentType, 
+          message.post_snippet || message.message_text || ''
+        );
+        if (attachmentElement) {
+          attachmentsDiv.appendChild(attachmentElement);
+          hasAttachments = true;
+        }
+      }
+    });
+  }
+
+  // Only append attachments div if there are attachments
+  if (hasAttachments) {
     messageBody.appendChild(attachmentsDiv);
   }
 
@@ -301,23 +360,36 @@ function createMessageElement(message) {
  * @returns {string} - Formatted date string
  */
 function formatDate(date) {
+  // Handle invalid dates
+  if (!date || isNaN(new Date(date))) {
+    return 'Unknown date';
+  }
+
+  // Ensure we have a Date object
+  const dateObj = new Date(date);
+  
+  // Double check the date is valid
+  if (isNaN(dateObj.getTime())) {
+    return 'Unknown date';
+  }
+
   const now = new Date();
   const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
   const yesterday = new Date(today);
   yesterday.setDate(yesterday.getDate() - 1);
 
   // Check if date is today
-  if (date >= today) {
-    return `Today at ${date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
+  if (dateObj >= today) {
+    return `Today at ${dateObj.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
   }
 
   // Check if date is yesterday
-  if (date >= yesterday) {
-    return `Yesterday at ${date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
+  if (dateObj >= yesterday) {
+    return `Yesterday at ${dateObj.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
   }
 
   // Otherwise show full date
-  return date.toLocaleString([], {
+  return dateObj.toLocaleString([], {
     year: 'numeric',
     month: 'short',
     day: 'numeric',

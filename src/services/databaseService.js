@@ -328,7 +328,12 @@ class DatabaseService {
     }
 
     try {
+      // Only fetch WhatsApp-sourced posts (case-insensitive)
       const posts = await this.models.PostBank.findAll({
+        where: this.models.sequelize.where(
+          this.models.sequelize.fn('LOWER', this.models.sequelize.col('source')),
+          'whatsapp'
+        ),
         include: [{
           model: this.models.CommonAttachment,
           as: 'commonAttachments',

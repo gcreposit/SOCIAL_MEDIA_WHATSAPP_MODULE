@@ -52,6 +52,12 @@ class DatabaseService {
       await this.models.PostBank.autoMigrate();
       console.log('✅ PostBank auto-migration completed');
       
+      // Ensure CommonAttachment has platform_name column
+      if (this.models.CommonAttachment && typeof this.models.CommonAttachment.autoMigrate === 'function') {
+        await this.models.CommonAttachment.autoMigrate();
+        console.log('✅ CommonAttachment auto-migration completed');
+      }
+      
       this.isConnected = true;
       return true;
     } catch (error) {
@@ -194,6 +200,7 @@ class DatabaseService {
             batchAttachmentPath,
             linkMetadata
           }),
+          platform_name: 'Whatsapp',
           image_attachment_path: imageAttachmentPath,
           document_attachment_path: documentAttachmentPath,
           video_attachment_path: videoAttachmentPath,

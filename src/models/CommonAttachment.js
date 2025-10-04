@@ -30,6 +30,13 @@ module.exports = (sequelize) => {
       allowNull: false,
       comment: 'Type of attachment: image, video, audio, document, link, batch'
     },
+
+    // Platform name (e.g., Whatsapp)
+    platform_name: {
+      type: DataTypes.STRING(50),
+      allowNull: false,
+      comment: 'Source platform of the attachment'
+    },
     
     // File paths for different attachment types
     image_attachment_path: {
@@ -145,6 +152,9 @@ module.exports = (sequelize) => {
         fields: ['attachment_type']
       },
       {
+        fields: ['platform_name']
+      },
+      {
         fields: ['download_status']
       },
       {
@@ -169,6 +179,55 @@ module.exports = (sequelize) => {
       foreignKey: 'post_bank_id',
       as: 'postBank'
     });
+  };
+
+  // AUTO-MIGRATION FUNCTION - Ensures platform_name column exists on existing tables
+  CommonAttachment.autoMigrate = async () => {
+    try {
+      console.log('Starting CommonAttachment auto-migration...');
+      const queryInterface = sequelize.getQueryInterface();
+
+      // Check if table exists first
+      const tables = await queryInterface.showAllTables();
+      if (!tables.includes('common_attachments')) {
+        console.log('common_attachments table does not exist, will be created by sync()');
+        return;
+      }
+
+      // Get existing columns
+      const tableInfo = await queryInterface.describeTable('common_attachments');
+      console.log('Existing columns in common_attachments:', Object.keys(tableInfo));
+
+      // Ensure platform_name exists and has no DB default
+      if (!tableInfo['platform_name']) {
+        console.log('Adding missing column: platform_name (no default)');
+        await queryInterface.addColumn('common_attachments', 'platform_name', {
+          type: DataTypes.STRING(50),
+          allowNull: false,
+          comment: 'Source platform of the attachment'
+        });
+        console.log('platform_name column added to common_attachments');
+      } else {
+        // Remove default at DB level if present
+        const col = tableInfo['platform_name'];
+        if (col && col.defaultValue) {
+          console.log('Removing default from platform_name column');
+          await queryInterface.changeColumn('common_attachments', 'platform_name', {
+            type: DataTypes.STRING(50),
+            allowNull: false,
+            comment: 'Source platform of the attachment'
+          });
+          console.log('Default removed from platform_name column');
+        } else {
+          console.log('platform_name column exists without default; nothing to change.');
+        }
+      }
+
+      console.log('CommonAttachment auto-migration completed.');
+    } catch (error) {
+      console.error('Error during CommonAttachment auto-migration:', error);
+      // Do not throw to avoid application crash
+    }
   };
 
   return CommonAttachment;

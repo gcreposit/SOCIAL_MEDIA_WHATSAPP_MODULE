@@ -700,6 +700,7 @@ class MessageProcessor {
     if (message.imageAttachmentPath) {
       attachments.push({
         post_bank_id: postBankId,
+        platform_name: 'Whatsapp',
         attachment_type: 'image',
         image_attachment_path: message.imageAttachmentPath,
         video_attachment_path: null,
@@ -721,6 +722,7 @@ class MessageProcessor {
       attachments.push({
         post_bank_id: postBankId,
         attachment_type: 'video',
+        platform_name: 'Whatsapp',
         image_attachment_path: null,
         video_attachment_path: message.videoAttachmentPath,
         audio_attachment_path: null,
@@ -741,6 +743,7 @@ class MessageProcessor {
       attachments.push({
         post_bank_id: postBankId,
         attachment_type: 'audio',
+        platform_name: 'Whatsapp',
         image_attachment_path: null,
         video_attachment_path: null,
         audio_attachment_path: message.audioAttachmentPath,
@@ -761,6 +764,7 @@ class MessageProcessor {
       attachments.push({
         post_bank_id: postBankId,
         attachment_type: 'document',
+        platform_name: 'Whatsapp',
         image_attachment_path: null,
         video_attachment_path: null,
         audio_attachment_path: null,
@@ -781,6 +785,7 @@ class MessageProcessor {
       attachments.push({
         post_bank_id: postBankId,
         attachment_type: 'link',
+        platform_name: 'Whatsapp',
         image_attachment_path: null,
         video_attachment_path: null,
         audio_attachment_path: null,
@@ -801,6 +806,7 @@ class MessageProcessor {
       attachments.push({
         post_bank_id: postBankId,
         attachment_type: 'batch',
+        platform_name: 'Whatsapp',
         image_attachment_path: null,
         video_attachment_path: null,
         audio_attachment_path: null,
@@ -827,6 +833,7 @@ class MessageProcessor {
       attachments.push({
         post_bank_id: postBankId,
         attachment_type: 'reply',
+        platform_name: 'Whatsapp',
         image_attachment_path: message.replyAttachmentType === 'image' ? message.replyAttachmentPath : null,
         video_attachment_path: message.replyAttachmentType === 'video' ? message.replyAttachmentPath : null,
         audio_attachment_path: message.replyAttachmentType === 'audio' ? message.replyAttachmentPath : null,

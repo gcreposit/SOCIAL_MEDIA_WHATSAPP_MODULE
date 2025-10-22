@@ -3,6 +3,7 @@ const { Sequelize } = require('sequelize');
 // Import model definitions
 const PostBankModel = require('./PostBank');
 const CommonAttachmentModel = require('./CommonAttachment');
+const PostUserModel = require('./PostUser');
 
 /**
  * Initialize models and set up associations
@@ -13,6 +14,7 @@ function initializeModels(sequelize) {
   // Initialize models
   const PostBank = PostBankModel(sequelize);
   const CommonAttachment = CommonAttachmentModel(sequelize);
+  const PostUser = PostUserModel(sequelize);
 
   // Set up associations
   PostBank.hasMany(CommonAttachment, {
@@ -26,10 +28,22 @@ function initializeModels(sequelize) {
     as: 'postBank'
   });
 
+  // PostUser associations
+  PostUser.hasMany(PostBank, {
+    foreignKey: 'author_user_id',
+    as: 'messages'
+  });
+
+  PostBank.belongsTo(PostUser, {
+    foreignKey: 'author_user_id',
+    as: 'author'
+  });
+
   // Return models object
   return {
     PostBank,
     CommonAttachment,
+    PostUser,
     sequelize,
     Sequelize
   };
@@ -38,5 +52,6 @@ function initializeModels(sequelize) {
 module.exports = {
   initializeModels,
   PostBankModel,
-  CommonAttachmentModel
+  CommonAttachmentModel,
+  PostUserModel
 };

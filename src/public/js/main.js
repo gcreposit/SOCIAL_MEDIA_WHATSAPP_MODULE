@@ -827,18 +827,279 @@ function updateConnectionStatus(status) {
   // Clear existing classes
   indicator.className = 'status-indicator';
   
-  if (status.isAuthenticated && status.isReady) {
+  // Handle both legacy and Wasender API status formats
+  const isAuthenticated = status.isAuthenticated || status.authenticated;
+  const isReady = status.isReady || status.ready;
+  const architecture = status.architecture || 'unknown';
+  
+  if (isAuthenticated && isReady) {
     indicator.classList.add('connected');
-    text.textContent = `Connected as: ${status.businessNumber || 'WhatsApp User'}`;
-  } else if (status.isAuthenticated && !status.isReady) {
+    const sessionName = status.sessionName || status.businessNumber || 'WhatsApp User';
+    text.textContent = `Connected: ${sessionName} (${architecture})`;
+  } else if (isAuthenticated && !isReady) {
     indicator.classList.add('connecting');
-    text.textContent = 'WhatsApp authenticated, initializing...';
-  } else if (status.qrCode) {
+    text.textContent = `Authenticated, initializing... (${architecture})`;
+  } else if (status.qrCode || status.status === 'qr') {
     indicator.classList.add('connecting');
-    text.textContent = 'Scan QR code to authenticate';
+    text.textContent = `Scan QR code to authenticate (${architecture})`;
+  } else if (status.status === 'disconnected') {
+    indicator.classList.add('error');
+    text.textContent = `Disconnected (${architecture})`;
+  } else if (status.status === 'service_unavailable') {
+    indicator.classList.add('error');
+    text.textContent = `Service unavailable (${architecture})`;
   } else {
     indicator.classList.add('connecting');
-    text.textContent = status.message || 'Waiting for connection...';
+    text.textContent = status.message || `Waiting for connection... (${architecture})`;
+  }
+}
+
+/**
+ * Session Management Functions
+ */
+
+// Show session controls modal
+function showSessionControls() {
+  const modal = document.getElementById('session-controls-modal');
+  if (modal) {
+    modal.style.display = 'block';
+    loadSessionStatus();
+    loadSessionMetrics();
+  }
+}
+
+// Close session controls modal
+function closeSessionControls() {
+  const modal = document.getElementById('session-controls-modal');
+  if (modal) {
+    modal.style.display = 'none';
+  }
+}
+
+// Load session status
+async function loadSessionStatus() {
+  try {
+    const response = await fetch('/api/wasender/session-status');
+    const data = await response.json();
+    
+    const display = document.getElementById('session-status-display');
+    if (display) {
+      if (data.success) {
+        const info = data.sessionInfo;
+        const status = data.status;
+        const health = data.health;
+        
+        display.innerHTML = `
+<strong>Session Information:</strong>
+Session ID: ${info.sessionId || 'Not available'}
+Session Name: ${info.sessionName || 'Default'}
+Created: ${info.createdAt ? new Date(info.createdAt).toLocaleString() : 'Unknown'}
+Last Connection: ${info.lastSuccessfulConnection ? new Date(info.lastSuccessfulConnection).toLocaleString() : 'Never'}
+
+<strong>Status:</strong>
+Status: ${status.status}
+Connected: ${status.connected ? 'Yes' : 'No'}
+Needs QR: ${status.needsQR ? 'Yes' : 'No'}
+Message: ${status.message || 'No message'}
+
+<strong>Health:</strong>
+Health Score: ${health.healthScore}
+Uptime: ${health.uptime ? Math.floor(health.uptime / 1000 / 60) + ' minutes' : 'N/A'}
+Reconnect Attempts: ${info.reconnectAttempts || 0}
+Connection Failures: ${info.connectionFailures || 0}
+        `;
+      } else {
+        display.innerHTML = `Error: ${data.error || 'Failed to load session status'}`;
+      }
+    }
+  } catch (error) {
+    console.error('Error loading session status:', error);
+    const display = document.getElementById('session-status-display');
+    if (display) {
+      display.innerHTML = `Error: ${error.message}`;
+    }
+  }
+}
+
+// Refresh session status
+async function refreshSessionStatus() {
+  await loadSessionStatus();
+  // Also refresh the main status
+  await checkWhatsAppStatus();
+}
+
+// Load session metrics
+async function loadSessionMetrics() {
+  try {
+    const response = await fetch('/api/wasender/metrics');
+    const data = await response.json();
+    
+    const display = document.getElementById('session-metrics-display');
+    if (display) {
+      if (data.success) {
+        const metrics = data.metrics;
+        
+        display.innerHTML = `
+<strong>Session Metrics:</strong>
+Status: ${metrics.session.status}
+Uptime: ${metrics.session.uptime ? Math.floor(metrics.session.uptime / 1000 / 60) + ' minutes' : 'N/A'}
+Reconnect Attempts: ${metrics.session.reconnectAttempts || 0}
+Connection Failures: ${metrics.session.connectionFailures || 0}
+Monitoring: ${metrics.session.isMonitoring ? 'Active' : 'Inactive'}
+
+<strong>Database Metrics:</strong>
+Total Groups: ${metrics.database.totalGroups}
+Total Messages: ${metrics.database.totalMessages}
+Active Groups (24h): ${metrics.database.activeGroups}
+
+<strong>Webhook Metrics:</strong>
+${typeof metrics.webhook === 'object' && metrics.webhook.message ? 
+  metrics.webhook.message : 
+  'Webhook metrics available'}
+        `;
+      } else {
+        display.innerHTML = `Error: ${data.error || 'Failed to load metrics'}`;
+      }
+    }
+  } catch (error) {
+    console.error('Error loading session metrics:', error);
+    const display = document.getElementById('session-metrics-display');
+    if (display) {
+      display.innerHTML = `Error: ${error.message}`;
+    }
+  }
+}
+
+// Reconnect session
+async function reconnectSession() {
+  if (!confirm('Reconnect the WhatsApp session?')) return;
+  
+  try {
+    const response = await fetch('/api/wasender/reconnect', { method: 'POST' });
+    const data = await response.json();
+    
+    if (data.success) {
+      alert('Reconnection initiated successfully!');
+      await refreshSessionStatus();
+    } else {
+      alert('Reconnection failed: ' + (data.error || 'Unknown error'));
+    }
+  } catch (error) {
+    console.error('Error reconnecting session:', error);
+    alert('Reconnection failed: ' + error.message);
+  }
+}
+
+// Disconnect session
+async function disconnectSession() {
+  if (!confirm('Are you sure you want to disconnect the WhatsApp session? You will need to scan the QR code again.')) return;
+  
+  try {
+    const response = await fetch('/api/wasender/disconnect', { method: 'POST' });
+    const data = await response.json();
+    
+    if (data.success) {
+      alert('Session disconnected successfully!');
+      await refreshSessionStatus();
+    } else {
+      alert('Disconnect failed: ' + (data.error || 'Unknown error'));
+    }
+  } catch (error) {
+    console.error('Error disconnecting session:', error);
+    alert('Disconnect failed: ' + error.message);
+  }
+}
+
+// Force logout
+async function forceLogout() {
+  if (!confirm('Force logout will disconnect the session. Continue?')) return;
+  
+  try {
+    const response = await fetch('/api/whatsapp/force-logout', { method: 'POST' });
+    const data = await response.json();
+    
+    if (data.success) {
+      alert('Session logged out successfully!');
+      await refreshSessionStatus();
+    } else {
+      alert('Force logout failed: ' + (data.error || 'Unknown error'));
+    }
+  } catch (error) {
+    console.error('Error forcing logout:', error);
+    alert('Force logout failed: ' + error.message);
+  }
+}
+
+// Test webhook
+async function testWebhook() {
+  try {
+    const response = await fetch('/webhook/test', { 
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        event: 'test',
+        data: { message: 'Test webhook from dashboard' }
+      })
+    });
+    const data = await response.json();
+    
+    if (data.success) {
+      alert('Test webhook sent successfully!');
+    } else {
+      alert('Test webhook failed: ' + (data.error || 'Unknown error'));
+    }
+  } catch (error) {
+    console.error('Error testing webhook:', error);
+    alert('Test webhook failed: ' + error.message);
+  }
+}
+
+// Export session data
+async function exportSessionData() {
+  try {
+    const [statusResponse, metricsResponse] = await Promise.all([
+      fetch('/api/wasender/session-status'),
+      fetch('/api/wasender/metrics')
+    ]);
+    
+    const statusData = await statusResponse.json();
+    const metricsData = await metricsResponse.json();
+    
+    const exportData = {
+      timestamp: new Date().toISOString(),
+      sessionStatus: statusData,
+      sessionMetrics: metricsData
+    };
+    
+    const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `session-data-${new Date().toISOString().split('T')[0]}.json`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    
+    alert('Session data exported successfully!');
+  } catch (error) {
+    console.error('Error exporting session data:', error);
+    alert('Export failed: ' + error.message);
+  }
+}
+
+// Clear session data
+async function clearSessionData() {
+  if (!confirm('This will clear session data. Are you sure?')) return;
+  
+  alert('Session data clearing is not implemented yet. This would clear local session cache.');
+}
+
+// Close modal when clicking outside
+window.onclick = function(event) {
+  const modal = document.getElementById('session-controls-modal');
+  if (event.target === modal) {
+    closeSessionControls();
   }
 }
 

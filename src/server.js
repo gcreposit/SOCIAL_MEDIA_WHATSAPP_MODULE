@@ -9,15 +9,27 @@ const socketIo = require('socket.io');
 const path = require('path');
 const cors = require('cors');
 const apiRoutes = require('./routes/api');
+const createWebhookRouter = require('./routes/webhook');
+const healthRoutes = require('./routes/healthRoutes');
 
 class Server {
   /**
    * Constructor
    * @param {Object} dbService - Database service
+   * @param {Object} documentViewerService - Document viewer service
+   * @param {Object} sessionManager - SessionManager for Wasender integration
+   * @param {Object} webhookHandler - WebhookHandler for processing webhooks
+   * @param {Object} wasenderClient - WasenderClient for API calls (optional, extracted from webhookHandler if not provided)
    */
-  constructor(dbService, documentViewerService = null) {
+  constructor(dbService, documentViewerService = null, sessionManager = null, webhookHandler = null, wasenderClient = null) {
     this.dbService = dbService;
     this.documentViewerService = documentViewerService;
+    this.sessionManager = sessionManager;
+    this.webhookHandler = webhookHandler;
+    
+    // Extract wasenderClient from webhookHandler if not provided directly
+    this.wasenderClient = wasenderClient || (webhookHandler?.groupMessageMonitor?.wasenderClient);
+    
     this.app = express();
     this.server = http.createServer(this.app);
     this.io = socketIo(this.server);
@@ -32,19 +44,22 @@ class Server {
    * Set up Express middleware
    */
   setupMiddleware() {
+    // Trust proxy for ngrok and rate limiting (specific to localhost and ngrok)
+    this.app.set('trust proxy', ['loopback', 'linklocal', 'uniquelocal']);
+    
     // Enable CORS for cross-origin requests
     this.app.use(cors({
       origin: ['http://localhost:8080', 'http://localhost:9000', 'http://localhost:3000','http://94.136.189.241:2121'],
       credentials: true,
       methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-      allowedHeaders: ['Origin', 'X-Requested-With', 'Content-Type', 'Accept', 'ngrok-skip-browser-warning', 'User-Agent']
+      allowedHeaders: ['Origin', 'X-Requested-With', 'Content-Type', 'Accept', 'ngrok-skip-browser-warning', 'User-Agent', 'X-Webhook-Signature']
     }));
 
     // Additional CORS headers for broader compatibility
     this.app.use((req, res, next) => {
       res.header('Access-Control-Allow-Origin', '*');
       res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
-      res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, ngrok-skip-browser-warning, User-Agent');
+      res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, ngrok-skip-browser-warning, User-Agent, X-Webhook-Signature');
       if (req.method === 'OPTIONS') {
         res.sendStatus(200);
       } else {
@@ -58,16 +73,41 @@ class Server {
     // Serve attachment files
     this.app.use('/attachments', express.static(process.env.ATTACHMENT_PATH || '/Users/apple1/Downloads/WHATSAPP_DOCS/'));
     
-    // Parse JSON request bodies
-    this.app.use(express.json());
+    // Parse JSON request bodies (webhook routes handle their own parsing)
+    this.app.use(express.json({
+      limit: '10mb', // Increase limit for webhook payloads with media
+      verify: (req, res, buf, encoding) => {
+        // Store raw body for webhook signature verification
+        if (req.path.startsWith('/webhook/')) {
+          req.rawBody = buf;
+        }
+      }
+    }));
   }
   
   /**
    * Set up routes
    */
   setupRoutes() {
+    // Health check routes (must be first for load balancers)
+    this.app.use('/', healthRoutes);
+    
+    // Webhook routes (must be before other middleware that might interfere)
+    this.app.use('/webhook', createWebhookRouter(this.sessionManager, this.dbService, this.wasenderClient));
+    
     // API routes
-    this.app.use('/api', apiRoutes(this.dbService, this.documentViewerService));
+    this.app.use('/api', apiRoutes(this.dbService, this.documentViewerService, this.sessionManager));
+    
+    // Media serving routes
+    const mediaRoutes = require('./routes/media');
+    this.app.use('/api/media', mediaRoutes);
+    
+    // Media queue monitoring routes
+    const mediaQueueRoutes = require('./routes/mediaQueue');
+    this.app.use('/api/queue', mediaQueueRoutes);
+    
+    // Make database service available to routes
+    this.app.set('databaseService', this.dbService);
     
     // Document viewing routes
     if (this.documentViewerService) {
@@ -83,11 +123,6 @@ class Server {
     this.app.get('/dashboard.html', (req, res) => {
       res.sendFile(path.join(__dirname, 'public', 'dashboard.html'));
     });
-    
-    // // Table view route
-    // this.app.get('/table', (req, res) => {
-    //   res.sendFile(path.join(__dirname, 'public', 'table.html'));
-    // });
     
     // QR code authentication route
     this.app.get('/qr', (req, res) => {

@@ -11,219 +11,321 @@ module.exports = (sequelize) => {
       primaryKey: true,
       autoIncrement: true
     },
-    
+
     // Post content fields
     post_title: {
       type: DataTypes.TEXT,
       allowNull: true,
       comment: 'Will be blank for WhatsApp messages'
     },
-    
+
     post_snippet: {
       type: DataTypes.TEXT,
       allowNull: false,
       comment: 'Contains message_text from WhatsApp'
     },
-    
+
     post_url: {
       type: DataTypes.TEXT,
       allowNull: true,
       comment: 'URL if any in the message'
     },
-    
+
     // Source identification
     core_source: {
       type: DataTypes.STRING(255),
       defaultValue: 'WhatsApp',
       comment: 'Always WhatsApp for this integration'
     },
-    
+
     source: {
       type: DataTypes.STRING(255),
       defaultValue: 'WhatsApp',
       comment: 'Always WhatsApp for this integration'
     },
-    
+
     // Timestamp fields
     post_timestamp: {
       type: DataTypes.DATE,
       allowNull: false,
       comment: 'Original message timestamp from WhatsApp'
     },
-    
+
     post_date: {
       type: DataTypes.DATEONLY,
       allowNull: false,
       comment: 'Date in dd/mm/yyyy format when data was received'
     },
-    
+
     post_time: {
       type: DataTypes.TIME,
       allowNull: false,
       comment: 'Time when message was received in 24-hour format'
     },
-    
+
     // Author information
     author_name: {
       type: DataTypes.STRING(255),
       allowNull: false,
       comment: 'Group name from WhatsApp'
     },
-    
+
     author_username: {
       type: DataTypes.STRING(255),
       allowNull: false,
       comment: 'Sender name from WhatsApp'
     },
-    
+
     // Language and location
     post_language: {
       type: DataTypes.STRING(50),
       defaultValue: 'hi',
       comment: 'Hindi as default for WhatsApp news'
     },
-    
+
     post_location: {
       type: DataTypes.STRING(255),
       allowNull: true,
       comment: 'Not used for WhatsApp, kept null'
     },
-    
+
     // Post type
     post_type: {
       type: DataTypes.STRING(100),
       allowNull: true,
       comment: 'Type of WhatsApp message (text, image, video, etc.)'
     },
-    
+
     // Social media metrics (not applicable for WhatsApp, kept for compatibility)
     retweets: {
       type: DataTypes.INTEGER,
       defaultValue: 0
     },
-    
+
     bookmarks: {
       type: DataTypes.INTEGER,
       defaultValue: 0
     },
-    
+
     comments: {
       type: DataTypes.INTEGER,
       defaultValue: 0
     },
-    
+
     likes: {
       type: DataTypes.INTEGER,
       defaultValue: 0
     },
-    
+
     views: {
       type: DataTypes.BIGINT,
       defaultValue: 0
     },
-    
+
     // Metadata fields (not used for WhatsApp)
     attachments: {
       type: DataTypes.TEXT,
       allowNull: true
     },
-    
+
     mention_ids: {
       type: DataTypes.TEXT,
       allowNull: true
     },
-    
+
     mention_hashtags: {
       type: DataTypes.TEXT,
       allowNull: true
     },
-    
+
     keyword: {
       type: DataTypes.STRING(255),
       allowNull: true
     },
-    
+
     unique_hash: {
       type: DataTypes.STRING(32),
       allowNull: true
     },
-    
+
     video_id: {
       type: DataTypes.STRING(50),
       allowNull: true
     },
-    
+
     duration: {
       type: DataTypes.STRING(20),
       allowNull: true
     },
-    
+
     category_id: {
       type: DataTypes.STRING(10),
       allowNull: true
     },
-    
+
     channel_id: {
       type: DataTypes.STRING(50),
       allowNull: true
     },
-    
+
     post_id: {
       type: DataTypes.STRING(100),
       allowNull: true
     },
-    
+
     // Analysis status for new WhatsApp messages
     analysisStatus: {
       type: DataTypes.STRING(20),
       defaultValue: 'NOT_ANALYZED',
       comment: 'Analysis status for new WhatsApp messages'
     },
-    
+
     // WhatsApp specific fields for reference
     mobile_number: {
       type: DataTypes.STRING(20),
       allowNull: true,
       comment: 'Mobile number from original WhatsApp message'
     },
-    
+
     group_id: {
       type: DataTypes.STRING(100),
       allowNull: true,
       comment: 'WhatsApp group ID for reference'
     },
-    
+
+    // Foreign key to PostUser (main reference)
+    author_user_id: {
+      type: DataTypes.INTEGER,
+      allowNull: true,
+      references: {
+        model: 'post_users',
+        key: 'id'
+      },
+      comment: 'Foreign key to PostUser table'
+    },
+
+    searched_term: {
+      type: DataTypes.TEXT,
+      allowNull: true,
+      comment: 'Search query term'
+    },
+
+    query_tag: {
+      type: DataTypes.STRING(500),
+      allowNull: true,
+      comment: 'Query tag for recycling'
+    },
+
+    replies_since_id: {
+      type: DataTypes.STRING(255),
+      allowNull: true,
+      comment: 'Replies pagination ID'
+    },
+
+    rule_tag: {
+      type: DataTypes.TEXT,
+      allowNull: true,
+      comment: 'Rule tag'
+    },
+
+    // Reply and conversation fields
+    in_reply_to_id: {
+      type: DataTypes.STRING(255),
+      allowNull: true,
+      comment: 'ID of message being replied to'
+    },
+
+    in_reply_to_user_id: {
+      type: DataTypes.STRING(255),
+      allowNull: true,
+      comment: 'User ID of message being replied to'
+    },
+
+    in_reply_to_username: {
+      type: DataTypes.STRING(255),
+      allowNull: true,
+      comment: 'Username of message being replied to'
+    },
+
+    is_reply: {
+      type: DataTypes.BOOLEAN,
+      defaultValue: false,
+      comment: 'Whether this is a reply'
+    },
+
+    display_text_range: {
+      type: DataTypes.STRING(50),
+      allowNull: true,
+      comment: 'Display text range as start-end'
+    },
+
+    device_source: {
+      type: DataTypes.STRING(255),
+      allowNull: true,
+      comment: 'Source device information'
+    },
+
+    extended_entities: {
+      type: DataTypes.TEXT,
+      allowNull: true,
+      comment: 'Extended entities JSON'
+    },
+
+    possibly_sensitive: {
+      type: DataTypes.BOOLEAN,
+      defaultValue: false,
+      comment: 'Whether content is possibly sensitive'
+    },
+
+    pinned_tweet_ids: {
+      type: DataTypes.TEXT,
+      allowNull: true,
+      comment: 'Pinned tweet IDs as JSON'
+    },
+
+    is_limited_reply: {
+      type: DataTypes.BOOLEAN,
+      defaultValue: false,
+      comment: 'Whether reply is limited'
+    },
+
+    article: {
+      type: DataTypes.TEXT,
+      allowNull: true,
+      comment: 'Article JSON data'
+    },
+
     reply_to_message_id: {
       type: DataTypes.STRING(100),
       allowNull: true,
       comment: 'ID of message being replied to'
     },
-    
+
     reply_text: {
       type: DataTypes.TEXT,
       allowNull: true,
       comment: 'Text of the message being replied to'
     },
-    
+
     // Attachment references (will be handled by CommonAttachment table)
     photo_attachment: {
       type: DataTypes.BOOLEAN,
       defaultValue: false,
       comment: 'Indicates if message has photo attachment'
     },
-    
+
     video_attachment: {
       type: DataTypes.BOOLEAN,
       defaultValue: false,
       comment: 'Indicates if message has video attachment'
     },
-    
+
     // Timestamps
     created_at: {
       type: DataTypes.DATE,
       defaultValue: DataTypes.NOW
     },
-    
+
     updated_at: {
       type: DataTypes.DATE,
       defaultValue: DataTypes.NOW
@@ -237,12 +339,21 @@ module.exports = (sequelize) => {
     // Existing indexes in database will be used
   });
 
+  // Define associations
+  PostBank.associate = (models) => {
+    // Many-to-one relationship with PostUser
+    PostBank.belongsTo(models.PostUser, {
+      foreignKey: 'author_user_id',
+      as: 'author'
+    });
+  };
+
   // AUTO-MIGRATION FUNCTION - Ensures WhatsApp-specific fields are added to existing table
   PostBank.autoMigrate = async () => {
     try {
       console.log('Starting PostBank auto-migration...');
       const queryInterface = sequelize.getQueryInterface();
-      
+
       // Check if table exists first
       const tables = await queryInterface.showAllTables();
       if (!tables.includes('post_bank')) {
@@ -253,9 +364,9 @@ module.exports = (sequelize) => {
       // Get existing columns
       const tableInfo = await queryInterface.describeTable('post_bank');
       console.log('Existing columns in post_bank:', Object.keys(tableInfo));
-      
-      // Define ALL WhatsApp-specific columns that need to be added
-      const whatsappColumns = {
+
+      // Define ALL columns that need to be added from NEW_CHANGED_MODELS
+      const newColumns = {
         mobile_number: {
           type: DataTypes.STRING(20),
           allowNull: true,
@@ -285,12 +396,96 @@ module.exports = (sequelize) => {
           type: DataTypes.DATE,
           defaultValue: DataTypes.NOW,
           comment: 'Record update timestamp'
+        },
+        author_user_id: {
+          type: DataTypes.INTEGER,
+          allowNull: true,
+          references: {
+            model: 'post_users',
+            key: 'id'
+          },
+          comment: 'Foreign key to PostUser table'
+        },
+        searched_term: {
+          type: DataTypes.TEXT,
+          allowNull: true,
+          comment: 'Search query term'
+        },
+        query_tag: {
+          type: DataTypes.STRING(500),
+          allowNull: true,
+          comment: 'Query tag for recycling'
+        },
+        replies_since_id: {
+          type: DataTypes.STRING(255),
+          allowNull: true,
+          comment: 'Replies pagination ID'
+        },
+        rule_tag: {
+          type: DataTypes.TEXT,
+          allowNull: true,
+          comment: 'Rule tag'
+        },
+        in_reply_to_id: {
+          type: DataTypes.STRING(255),
+          allowNull: true,
+          comment: 'ID of message being replied to'
+        },
+        in_reply_to_user_id: {
+          type: DataTypes.STRING(255),
+          allowNull: true,
+          comment: 'User ID of message being replied to'
+        },
+        in_reply_to_username: {
+          type: DataTypes.STRING(255),
+          allowNull: true,
+          comment: 'Username of message being replied to'
+        },
+        is_reply: {
+          type: DataTypes.BOOLEAN,
+          defaultValue: false,
+          comment: 'Whether this is a reply'
+        },
+        display_text_range: {
+          type: DataTypes.STRING(50),
+          allowNull: true,
+          comment: 'Display text range as start-end'
+        },
+        device_source: {
+          type: DataTypes.STRING(255),
+          allowNull: true,
+          comment: 'Source device information'
+        },
+        extended_entities: {
+          type: DataTypes.TEXT,
+          allowNull: true,
+          comment: 'Extended entities JSON'
+        },
+        possibly_sensitive: {
+          type: DataTypes.BOOLEAN,
+          defaultValue: false,
+          comment: 'Whether content is possibly sensitive'
+        },
+        pinned_tweet_ids: {
+          type: DataTypes.TEXT,
+          allowNull: true,
+          comment: 'Pinned tweet IDs as JSON'
+        },
+        is_limited_reply: {
+          type: DataTypes.BOOLEAN,
+          defaultValue: false,
+          comment: 'Whether reply is limited'
+        },
+        article: {
+          type: DataTypes.TEXT,
+          allowNull: true,
+          comment: 'Article JSON data'
         }
       };
 
       // Add missing columns
       let columnsAdded = 0;
-      for (const [columnName, columnDef] of Object.entries(whatsappColumns)) {
+      for (const [columnName, columnDef] of Object.entries(newColumns)) {
         if (!tableInfo[columnName]) {
           console.log(`Adding missing column: ${columnName}`);
           await queryInterface.addColumn('post_bank', columnName, columnDef);

@@ -7,10 +7,15 @@ require('dotenv').config();
 
 const DatabaseService = require('./services/databaseService');
 const MessageProcessor = require('./services/messageProcessor');
-const WhatsAppClient = require('./services/whatsappClient');
 const AttachmentService = require('./services/attachmentService');
 const DocumentViewerService = require('./services/documentViewerService');
 const Server = require('./server');
+
+// Wasender API services
+const SessionManager = require('./services/wasender/sessionManager');
+const WasenderClient = require('./services/wasender/wasenderClient');
+const WebhookHandler = require('./services/wasender/webhookHandler');
+const NgrokService = require('./services/wasender/ngrokService');
 
 class WhatsAppGroupCapture {
   constructor() {
@@ -18,8 +23,26 @@ class WhatsAppGroupCapture {
     this.attachmentService = new AttachmentService();
     this.messageProcessor = new MessageProcessor();
     this.documentViewerService = new DocumentViewerService(this.attachmentService);
-    this.server = new Server(this.dbService, this.documentViewerService);
-    this.whatsappClient = new WhatsAppClient(this.messageProcessor, this.dbService, this.server);
+
+    // Initialize Wasender API services
+    if (process.env.WASENDER_API_KEY && process.env.WASENDER_PERSONAL_ACCESS_TOKEN) {
+      console.log('Wasender API credentials detected - initializing Wasender services');
+      this.sessionManager = new SessionManager();
+      this.wasenderClient = new WasenderClient();
+      this.webhookHandler = new WebhookHandler(this.sessionManager, this.dbService, this.wasenderClient);
+
+      // Initialize ngrok service for development
+      if (process.env.NODE_ENV === 'development' && process.env.NGROK_AUTH_TOKEN) {
+        this.ngrokService = new NgrokService();
+      }
+
+      this.isWasenderMode = true;
+    } else {
+      throw new Error('Wasender API credentials are required. Please set WASENDER_API_KEY and WASENDER_PERSONAL_ACCESS_TOKEN in your environment variables.');
+    }
+
+    // Initialize server with Wasender services
+    this.server = new Server(this.dbService, this.documentViewerService, this.sessionManager, this.webhookHandler);
   }
 
   /**
@@ -28,36 +51,41 @@ class WhatsAppGroupCapture {
    */
   async start(startWebServer = true) {
     try {
-      console.log('Starting WhatsApp Group Message Capture...');
+      console.log('Starting WhatsApp Group Message Capture with Wasender API...');
 
       // Connect to database
       console.log('Connecting to database...');
       await this.dbService.connect();
       console.log('Database connected successfully');
 
-      // Start web server if not in backend-only mode
+      // Wasender API client is already initialized in constructor
+      console.log('✅ Wasender API client ready');
+
+      // Skip ngrok - using manual ngrok tunnel
+      console.log('✅ Using manual ngrok tunnel: https://10eeedbd03b4.ngrok-free.app');
+
+      // Start web server
       if (startWebServer) {
         console.log('Starting web server...');
         await this.server.start();
         console.log('Web server started successfully');
       } else {
         console.log('Running in backend-only mode - web server disabled');
-                await this.server.start();
-
+        await this.server.start();
       }
 
-      // Initialize WhatsApp client
-      console.log('Initializing WhatsApp client...');
-      await this.whatsappClient.initializeClient();
-      
-      console.log('WhatsApp Group Message Capture is now running!');
-      console.log('The system will capture and store all group messages.');
-      
-      // Test group access after a delay to ensure client is ready
-      // Use force initialization in backend-only mode
-      setTimeout(() => {
-        this.testGroupAccess(!startWebServer); // Force initialization in backend-only mode
-      }, startWebServer ? 10000 : 20000); // Wait longer in backend-only mode
+      // Skip SessionManager - using existing session from dashboard
+      console.log('✅ Using existing Wasender session from dashboard');
+
+      // Set up session event handlers
+      this.setupSessionEventHandlers();
+
+      // Webhook handler is already initialized
+      console.log('✅ Webhook handler ready');
+
+      console.log('WhatsApp Group Message Capture is now running with Wasender API!');
+      console.log('The system will capture and store all group messages via webhooks.');
+      console.log(`Webhook endpoint: ${process.env.WEBHOOK_PATH || '/webhook/wasender'}`);
 
     } catch (error) {
       console.error('Error starting application:', error);
@@ -66,65 +94,170 @@ class WhatsAppGroupCapture {
   }
 
   /**
-   * Test group access and display available groups
-   * @param {boolean} forceInitialization - Whether to force group initialization
+   * Set up SessionManager event handlers
    */
-  async testGroupAccess(forceInitialization = false) {
+  setupSessionEventHandlers() {
+    if (!this.sessionManager) return;
+
+    // Session lifecycle events
+    this.sessionManager.on('sessionCreated', (data) => {
+      console.log(`✅ Session created: ${data.sessionId}`);
+    });
+
+    this.sessionManager.on('sessionConnected', (data) => {
+      console.log(`🔗 Session connected: ${data.sessionId}`);
+    });
+
+    this.sessionManager.on('sessionDisconnected', (data) => {
+      console.log(`❌ Session disconnected: ${data.sessionId}`);
+    });
+
+    // QR code events
+    this.sessionManager.on('qrRequired', (data) => {
+      console.log(`📱 QR code authentication required for session: ${data.sessionId}`);
+      console.log('Please scan the QR code in the web interface at /qr');
+    });
+
+    this.sessionManager.on('qrCodeReceived', (data) => {
+      console.log(`📱 QR code received for session: ${data.sessionId}`);
+    });
+
+    this.sessionManager.on('qrCodeUpdated', (data) => {
+      console.log(`🔄 QR code updated for session: ${data.sessionId}`);
+    });
+
+    // Status change events
+    this.sessionManager.on('statusChanged', (data) => {
+      console.log(`🔄 Session status changed: ${data.previousStatus} → ${data.newStatus}`);
+
+      // Handle specific status transitions
+      switch (data.newStatus) {
+        case 'connected':
+          console.log('✅ WhatsApp session is now connected and ready for message capture');
+          break;
+        case 'disconnected':
+          console.log('❌ WhatsApp session disconnected - automatic reconnection will be attempted');
+          break;
+        case 'qr':
+          console.log('📱 QR code authentication required - please visit /qr to scan');
+          break;
+        case 'error':
+          console.log('⚠️ Session error occurred - check logs for details');
+          break;
+      }
+    });
+
+    // Health monitoring events
+    this.sessionManager.on('healthCheck', (data) => {
+      const healthEmoji = data.healthScore >= 80 ? '💚' : data.healthScore >= 60 ? '💛' : '❤️';
+      console.log(`${healthEmoji} Session health check: ${data.healthScore}% (${data.status})`);
+
+      if (data.healthScore < 60) {
+        console.log(`⚠️ Session health degraded - consecutive failures: ${data.consecutiveFailures}`);
+      }
+    });
+
+    // Administrator notification events
+    this.sessionManager.on('adminNotification', (notification) => {
+      const levelEmoji = {
+        'info': 'ℹ️',
+        'warning': '⚠️',
+        'critical': '🚨'
+      };
+
+      console.log(`${levelEmoji[notification.level] || '📢'} Admin Alert [${notification.level.toUpperCase()}]: ${notification.message}`);
+
+      if (notification.level === 'critical') {
+        console.log('🚨 CRITICAL: Immediate attention required for WhatsApp session');
+      }
+    });
+
+    // Connection and authentication events
+    this.sessionManager.on('connectionUpdate', (data) => {
+      console.log(`🔗 Connection update: ${data.connection} (Session: ${data.sessionId})`);
+    });
+
+    this.sessionManager.on('authFailure', (data) => {
+      console.log(`🚫 Authentication failed: ${data.reason} (Session: ${data.sessionId})`);
+      console.log('📱 Please check QR code authentication or session credentials');
+    });
+
+    this.sessionManager.on('authSuccess', (data) => {
+      console.log(`✅ Authentication successful (Session: ${data.sessionId})`);
+      if (data.user) {
+        console.log(`👤 Authenticated as: ${data.user.name || data.user.id}`);
+      }
+    });
+
+    // Reconnection events
+    this.sessionManager.on('reconnectionScheduled', (data) => {
+      console.log(`🔄 Reconnection scheduled - attempt ${data.attempt} in ${Math.round(data.delay / 1000)}s`);
+    });
+
+    this.sessionManager.on('reconnectionFailed', (data) => {
+      console.log(`❌ All reconnection attempts failed after ${data.totalAttempts} attempts`);
+      console.log('🔧 Manual intervention may be required - check session status');
+    });
+
+    this.sessionManager.on('maxReconnectAttemptsReached', (data) => {
+      console.log(`🚨 Maximum reconnection attempts reached (${data.attempts})`);
+      console.log('🔧 Please check the session status and manually reconnect if needed');
+    });
+
+    // Error events
+    this.sessionManager.on('error', (error) => {
+      console.error('❌ SessionManager error:', error.message);
+    });
+
+    this.sessionManager.on('sessionError', (error) => {
+      console.error('❌ Session error:', error.message);
+    });
+
+    this.sessionManager.on('connectionError', (error) => {
+      console.error('❌ Connection error:', error.message);
+    });
+
+    this.sessionManager.on('qrCodeError', (error) => {
+      console.error('❌ QR code error:', error.message);
+    });
+
+    // System events
+    this.sessionManager.on('reset', () => {
+      console.log('🔄 SessionManager has been reset');
+    });
+
+    this.sessionManager.on('initialized', () => {
+      console.log('🚀 SessionManager initialization complete');
+    });
+  }
+
+  /**
+   * Test session connectivity and webhook setup
+   */
+  async testSessionConnectivity() {
     try {
-      console.log('\n=== Testing Group Access ===');
-      
-      let groups;
-      if (forceInitialization) {
-        console.log('Forcing group initialization (backend-only mode)...');
-        groups = await this.whatsappClient.forceGroupInitialization();
+      console.log('\n=== Testing Session Connectivity ===');
+
+      // Check session status
+      const sessionStatus = await this.sessionManager.getSessionStatus();
+      console.log(`Session Status: ${sessionStatus.status}`);
+
+      if (sessionStatus.status === 'connected') {
+        console.log('✅ WhatsApp session is connected and ready for message capture');
+      } else if (sessionStatus.status === 'qr') {
+        console.log('📱 QR code authentication required - visit /qr to scan');
       } else {
-        // Use the more robust initializeGroups method instead of getAllGroups
-        groups = await this.whatsappClient.initializeGroups();
+        console.log(`⚠️ Session status: ${sessionStatus.status}`);
       }
-      
-      if (groups.length === 0) {
-        console.log('No groups found. Make sure your WhatsApp account is a member of some groups.');
-        console.log('The system will continue to retry group initialization automatically.');
-        
-        // Schedule another force initialization attempt for backend-only mode
-        if (forceInitialization) {
-          const nextAttemptTime = new Date(Date.now() + 60000);
-          console.log('Scheduling another force initialization attempt in 60 seconds...');
-          console.log(`⏰ Next attempt will be at: ${nextAttemptTime.toLocaleTimeString()}`);
-          
-          // Add a countdown timer
-          let countdown = 60;
-          const countdownInterval = setInterval(() => {
-            countdown--;
-            if (countdown > 0 && countdown % 10 === 0) {
-              console.log(`⏳ Next group initialization attempt in ${countdown} seconds...`);
-            }
-          }, 1000);
-          
-          setTimeout(() => {
-            clearInterval(countdownInterval);
-            console.log('🔄 60 seconds elapsed - attempting group initialization now...');
-            this.testGroupAccess(true);
-          }, 60000);
-        }
-      } else {
-        console.log(`Successfully found ${groups.length} groups. Message capture is active.`);
+
+      // Test webhook endpoint
+      if (this.ngrokService) {
+        const tunnelUrl = await this.ngrokService.getTunnelUrl();
+        console.log(`🌐 Webhook URL: ${tunnelUrl}${process.env.WEBHOOK_PATH || '/webhook/wasender'}`);
       }
-      
-      // Optional: Test fetching recent messages
-      // await this.whatsappClient.testGroupMessages();
-      
+
     } catch (error) {
-      console.error('Error testing group access:', error);
-      console.log('The system will continue to retry group initialization automatically.');
-      
-      // Schedule another attempt for backend-only mode
-      if (forceInitialization) {
-        console.log('Scheduling another force initialization attempt in 90 seconds...');
-        setTimeout(() => {
-          this.testGroupAccess(true);
-        }, 90000);
-      }
+      console.error('Error testing session connectivity:', error);
     }
   }
 
@@ -135,11 +268,22 @@ class WhatsAppGroupCapture {
     try {
       console.log('🛑 Shutting down application...');
 
-      const activeTimers = setTimeout(() => {}, 0);
+      const activeTimers = setTimeout(() => { }, 0);
       for (let i = 0; i < activeTimers; i++) {
         clearTimeout(i);
         clearInterval(i);
       }
+
+      // Stop ngrok tunnel
+      if (this.ngrokService) {
+        try {
+          await this.ngrokService.stopTunnel();
+          console.log('✅ Ngrok tunnel stopped');
+        } catch (ngrokError) {
+          console.error('❌ Error stopping ngrok tunnel:', ngrokError);
+        }
+      }
+
       // Check if server was started
       if (this.server && typeof this.server.stop === 'function') {
         try {
@@ -149,17 +293,35 @@ class WhatsAppGroupCapture {
           console.error('❌ Error stopping web server:', serverError);
         }
       }
-      
-      // Shutdown WhatsApp client
-      if (this.whatsappClient) {
+
+      // Shutdown Wasender services
+      if (this.webhookHandler) {
         try {
-          await this.whatsappClient.shutdown();
-          console.log('✅ WhatsApp client stopped');
-        } catch (clientError) {
-          console.error('❌ Error stopping WhatsApp client:', clientError);
+          await this.webhookHandler.cleanup();
+          console.log('✅ Webhook handler stopped');
+        } catch (webhookError) {
+          console.error('❌ Error stopping webhook handler:', webhookError);
         }
       }
-      
+
+      if (this.sessionManager) {
+        try {
+          await this.sessionManager.cleanup();
+          console.log('✅ SessionManager stopped');
+        } catch (sessionError) {
+          console.error('❌ Error stopping SessionManager:', sessionError);
+        }
+      }
+
+      if (this.wasenderClient) {
+        try {
+          await this.wasenderClient.cleanup();
+          console.log('✅ Wasender client stopped');
+        } catch (clientError) {
+          console.error('❌ Error stopping Wasender client:', clientError);
+        }
+      }
+
       // Disconnect from database
       if (this.dbService) {
         try {
@@ -169,7 +331,7 @@ class WhatsAppGroupCapture {
           console.error('❌ Error disconnecting from database:', dbError);
         }
       }
-      
+
       console.log('👋 Application shutdown complete');
       process.exit(0);
     } catch (error) {
@@ -186,48 +348,43 @@ global.isShuttingDown = false;
 async function main() {
   // Check for backend-only mode from command line arguments
   const backendOnly = process.argv.includes('--backend-only');
-  
+
   if (backendOnly) {
     console.log('Starting in backend-only mode (no web server)');
   }
-  
+
   // Check if shutdown signal received during startup
   if (global.isShuttingDown) {
     console.log('🛑 Shutdown signal detected during startup, aborting...');
     process.exit(0);
   }
-  
+
   const app = new WhatsAppGroupCapture();
   global.app = app; // For graceful shutdown
-  global.whatsappClient = app.whatsappClient; // For signal handlers
-  global.mongoose = require('mongoose'); // For signal handlers
-  
+
   // Expose services globally for API access
   global.app.documentViewerService = app.documentViewerService;
-  
+  global.app.sessionManager = app.sessionManager; // For Wasender API access
+  global.app.webhookHandler = app.webhookHandler; // For webhook access
+
   await app.start(!backendOnly); // Pass false to disable web server in backend-only mode
-  
-  // Add graceful shutdown handler for MongoDB connections
+
+  // Test session connectivity after startup
+  setTimeout(() => {
+    app.testSessionConnectivity();
+  }, 5000);
+
+  // Add graceful shutdown handler
   process.on('uncaughtException', (error) => {
     console.error('Uncaught exception:', error);
     gracefulShutdown();
   });
 }
 
-// Additional graceful shutdown function for MongoDB connections
+// Additional graceful shutdown function
 async function gracefulShutdown() {
   console.log('🛑 Graceful shutdown initiated...');
   try {
-    // Close MongoDB connections if they exist
-    const mongoose = require('mongoose');
-    if (mongoose.connection && mongoose.connection.readyState !== 0) {
-      console.log('🔄 Closing MongoDB connections...');
-      await mongoose.connection.close();
-      console.log('✅ MongoDB connections closed');
-    }
-    
-    // Other cleanup tasks can be added here
-    
     if (global.app) {
       await global.app.shutdown();
     } else {
@@ -243,25 +400,17 @@ async function gracefulShutdown() {
 // Enhanced signal handling with proper shutdown detection
 process.on('SIGINT', async () => {
   console.log('\n🛑 Received SIGINT signal. Gracefully shutting down...');
-  
+
   global.isShuttingDown = true;
-  
+
   try {
     // Allow some time for current operations to complete
     await new Promise(resolve => setTimeout(resolve, 2000));
-    
-    if (global.whatsappClient) {
-      await global.whatsappClient.shutdown();
-    }
-    
-    if (global.mongoose && global.mongoose.connection) {
-      await global.mongoose.disconnect();
-    }
-    
+
     if (global.app) {
       await global.app.shutdown();
     }
-    
+
     console.log('✅ Graceful shutdown completed');
     process.exit(0);
   } catch (error) {
@@ -272,25 +421,17 @@ process.on('SIGINT', async () => {
 
 process.on('SIGTERM', async () => {
   console.log('\n🛑 Received SIGTERM signal. Gracefully shutting down...');
-  
+
   global.isShuttingDown = true;
-  
+
   try {
     // Allow some time for current operations to complete
     await new Promise(resolve => setTimeout(resolve, 2000));
-    
-    if (global.whatsappClient) {
-      await global.whatsappClient.shutdown();
-    }
-    
-    if (global.mongoose && global.mongoose.connection) {
-      await global.mongoose.disconnect();
-    }
-    
+
     if (global.app) {
       await global.app.shutdown();
     }
-    
+
     console.log('✅ Graceful shutdown completed');
     process.exit(0);
   } catch (error) {

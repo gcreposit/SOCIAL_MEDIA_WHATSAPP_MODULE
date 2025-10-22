@@ -293,6 +293,9 @@
 
                     <div class="qr-actions">
                         <button class="refresh-btn" onclick="refreshQR()">🔄 Refresh QR Code</button>
+                        <button class="refresh-btn" onclick="forceReconnect()" style="background: #17a2b8; margin-left: 10px;">
+                            🔗 Force Reconnect
+                        </button>
                     </div>
                 </div>
 
@@ -309,6 +312,14 @@
                         <button onclick="window.location.href='/table'" class="refresh-btn"
                             style="background: #17a2b8; margin-left: 10px;">
                             📋 View Messages
+                        </button>
+                        <button onclick="showSessionInfo()" class="refresh-btn"
+                            style="background: #6c757d; margin-left: 10px;">
+                            ℹ️ Session Info
+                        </button>
+                        <button onclick="disconnectSession()" class="refresh-btn"
+                            style="background: #dc3545; margin-left: 10px;">
+                            🔌 Disconnect
                         </button>
                     </div>
                 </div>
@@ -388,17 +399,22 @@
                 const data = await response.json();
                 console.log('Status response:', data); // Debug log
                 
-                // Convert old API format to new format for consistency
-                const normalizedData = {
-                    isAuthenticated: data.authenticated || data.isAuthenticated,
-                    isReady: data.ready || data.isReady,
-                    businessNumber: data.businessPhoneNumber || data.businessNumber,
-                    qrCode: data.qrCode,
-                    qrCodeTime: data.qrCodeTime,
-                    message: data.message
-                };
-                
-                handleStatusUpdate(normalizedData);
+                // Handle different architectures
+                if (data.architecture === 'wasender') {
+                    await handleWasenderStatus(data);
+                } else {
+                    // Legacy format
+                    const normalizedData = {
+                        isAuthenticated: data.authenticated || data.isAuthenticated,
+                        isReady: data.ready || data.isReady,
+                        businessNumber: data.businessPhoneNumber || data.businessNumber,
+                        qrCode: data.qrCode,
+                        qrCodeTime: data.qrCodeTime,
+                        message: data.message
+                    };
+                    
+                    handleStatusUpdate(normalizedData);
+                }
                 
             } catch (error) {
                 console.error('Error checking status:', error);
@@ -408,6 +424,68 @@
                 if (!statusCheckInterval) {
                     statusCheckInterval = setInterval(checkStatus, 5000);
                 }
+            }
+        }
+
+        // Handle Wasender API status
+        async function handleWasenderStatus(data) {
+            console.log('Handling Wasender status:', data);
+            
+            if (data.authenticated && data.status === 'connected') {
+                // Session is connected
+                updateConnectionStatus('connected', `Connected via Wasender API`);
+                showAuthenticated(data.sessionInfo?.sessionName || data.sessionName || 'Wasender Session');
+                clearAllIntervals();
+            } else if (data.status === 'qr' || data.status === 'created') {
+                // Need QR code authentication
+                updateConnectionStatus('connecting', 'QR code authentication required...');
+                await fetchAndShowQRCode();
+            } else if (data.status === 'connecting') {
+                updateConnectionStatus('connecting', 'Connecting to WhatsApp...');
+                // Continue checking status
+                if (!statusCheckInterval) {
+                    statusCheckInterval = setInterval(checkStatus, 2000);
+                }
+            } else if (data.status === 'disconnected') {
+                updateConnectionStatus('error', 'Session disconnected');
+                showError('WhatsApp session is disconnected. Please reconnect.');
+                // Add reconnect option
+                addReconnectButton();
+            } else if (data.status === 'service_unavailable') {
+                updateConnectionStatus('error', 'Service unavailable');
+                showError('Wasender service is not available. Please check server configuration.');
+            } else {
+                updateConnectionStatus('connecting', data.message || 'Initializing session...');
+                // Continue checking status
+                if (!statusCheckInterval) {
+                    statusCheckInterval = setInterval(checkStatus, 3000);
+                }
+            }
+        }
+
+        // Fetch and show QR code for Wasender API
+        async function fetchAndShowQRCode() {
+            try {
+                const response = await fetch('/api/whatsapp/qr');
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+
+                const data = await response.json();
+                console.log('QR response:', data);
+
+                if (data.success && data.qrCode) {
+                    showQRCode(data.qrCode, data.timestamp);
+                    // Continue checking status while waiting for scan
+                    if (!statusCheckInterval) {
+                        statusCheckInterval = setInterval(checkStatus, 2000);
+                    }
+                } else {
+                    throw new Error(data.error || 'Failed to get QR code');
+                }
+            } catch (error) {
+                console.error('Error fetching QR code:', error);
+                showError('Failed to get QR code: ' + error.message);
             }
         }
 
@@ -559,14 +637,25 @@
                 refreshBtn.textContent = '🔄 Refreshing...';
                 refreshBtn.disabled = true;
 
-                await fetch('/api/whatsapp/refresh-qr', { method: 'POST' });
+                // First check if we're using Wasender API
+                const statusResponse = await fetch('/api/whatsapp/status');
+                const statusData = await statusResponse.json();
 
-                // Wait a moment for new QR to generate
-                setTimeout(() => {
-                    checkStatus();
-                    refreshBtn.textContent = originalText;
-                    refreshBtn.disabled = false;
-                }, 2000);
+                if (statusData.architecture === 'wasender') {
+                    // Use Wasender QR endpoint directly
+                    await fetchAndShowQRCode();
+                } else {
+                    // Use legacy refresh endpoint
+                    await fetch('/api/whatsapp/refresh-qr', { method: 'POST' });
+                    
+                    // Wait a moment for new QR to generate
+                    setTimeout(() => {
+                        checkStatus();
+                    }, 2000);
+                }
+
+                refreshBtn.textContent = originalText;
+                refreshBtn.disabled = false;
 
             } catch (error) {
                 console.error('Error refreshing QR:', error);
@@ -603,11 +692,141 @@
             clearAllIntervals();
         });
 
+        // Add reconnect button for disconnected sessions
+        function addReconnectButton() {
+            const errorContainer = document.getElementById('error-container');
+            if (errorContainer && errorContainer.style.display !== 'none') {
+                const existingBtn = errorContainer.querySelector('.reconnect-btn');
+                if (!existingBtn) {
+                    const reconnectBtn = document.createElement('button');
+                    reconnectBtn.className = 'refresh-btn reconnect-btn';
+                    reconnectBtn.style.marginLeft = '10px';
+                    reconnectBtn.style.background = '#17a2b8';
+                    reconnectBtn.textContent = '🔗 Reconnect Session';
+                    reconnectBtn.onclick = forceReconnect;
+                    
+                    const retryBtn = errorContainer.querySelector('.refresh-btn');
+                    if (retryBtn) {
+                        retryBtn.parentNode.insertBefore(reconnectBtn, retryBtn.nextSibling);
+                    }
+                }
+            }
+        }
+
+        // Force reconnect session
+        async function forceReconnect() {
+            try {
+                const btn = event.target;
+                const originalText = btn.textContent;
+                btn.textContent = '🔗 Reconnecting...';
+                btn.disabled = true;
+
+                updateConnectionStatus('connecting', 'Attempting to reconnect...');
+
+                const response = await fetch('/api/wasender/reconnect', { method: 'POST' });
+                const data = await response.json();
+
+                if (data.success) {
+                    updateConnectionStatus('connecting', 'Reconnection initiated, checking status...');
+                    // Wait a moment then check status
+                    setTimeout(() => {
+                        checkStatus();
+                    }, 2000);
+                } else {
+                    throw new Error(data.error || 'Reconnection failed');
+                }
+
+                btn.textContent = originalText;
+                btn.disabled = false;
+
+            } catch (error) {
+                console.error('Error reconnecting:', error);
+                showError('Failed to reconnect: ' + error.message);
+                
+                const btn = event.target;
+                btn.textContent = '🔗 Reconnect Session';
+                btn.disabled = false;
+            }
+        }
+
+        // Show session information
+        async function showSessionInfo() {
+            try {
+                const response = await fetch('/api/wasender/session-status');
+                const data = await response.json();
+
+                if (data.success) {
+                    const info = data.sessionInfo;
+                    const status = data.status;
+                    const health = data.health;
+
+                    const infoText = `
+Session Information:
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🆔 Session ID: ${info.sessionId || 'Not available'}
+📱 Session Name: ${info.sessionName || 'Default'}
+📅 Created: ${info.createdAt ? new Date(info.createdAt).toLocaleString() : 'Unknown'}
+🔗 Last Connection: ${info.lastSuccessfulConnection ? new Date(info.lastSuccessfulConnection).toLocaleString() : 'Never'}
+🔄 Reconnect Attempts: ${info.reconnectAttempts || 0}
+❌ Connection Failures: ${info.connectionFailures || 0}
+📊 Monitoring: ${info.isMonitoring ? 'Active' : 'Inactive'}
+
+Status:
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🟢 Status: ${status.status}
+💬 Message: ${status.message || 'No message'}
+🔌 Connected: ${status.connected ? 'Yes' : 'No'}
+🔑 Needs QR: ${status.needsQR ? 'Yes' : 'No'}
+
+Health:
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+⏱️ Uptime: ${health.uptime ? Math.floor(health.uptime / 1000 / 60) + ' minutes' : 'N/A'}
+💚 Health Score: ${health.healthScore}
+🚨 Last Error: ${health.lastError || 'None'}
+                    `;
+
+                    alert(infoText);
+                } else {
+                    throw new Error(data.error || 'Failed to get session info');
+                }
+            } catch (error) {
+                console.error('Error getting session info:', error);
+                alert('Failed to get session information: ' + error.message);
+            }
+        }
+
+        // Disconnect session
+        async function disconnectSession() {
+            if (!confirm('Are you sure you want to disconnect the WhatsApp session? You will need to scan the QR code again.')) {
+                return;
+            }
+
+            try {
+                const response = await fetch('/api/wasender/disconnect', { method: 'POST' });
+                const data = await response.json();
+
+                if (data.success) {
+                    alert('Session disconnected successfully. Please scan QR code to reconnect.');
+                    // Refresh the page to show QR code
+                    window.location.reload();
+                } else {
+                    throw new Error(data.error || 'Disconnect failed');
+                }
+            } catch (error) {
+                console.error('Error disconnecting session:', error);
+                alert('Failed to disconnect session: ' + error.message);
+            }
+        }
+
         // Add keyboard shortcuts
         document.addEventListener('keydown', function (e) {
             if (e.key === 'r' && (e.ctrlKey || e.metaKey)) {
                 e.preventDefault();
                 refreshQR();
+            }
+            if (e.key === 'i' && (e.ctrlKey || e.metaKey)) {
+                e.preventDefault();
+                showSessionInfo();
             }
         });
     </script>

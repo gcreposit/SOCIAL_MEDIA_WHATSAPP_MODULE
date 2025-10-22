@@ -93,7 +93,7 @@ module.exports = (sequelize) => {
     // WhatsApp specific fields from original messages table
     timestamp: {
       type: DataTypes.DATE,
-      allowNull: false,
+      allowNull: true,
       defaultValue: DataTypes.NOW,
       comment: 'Timestamp from original WhatsApp message'
     },

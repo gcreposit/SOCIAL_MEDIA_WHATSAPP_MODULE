@@ -1,0 +1,126 @@
+The Problem with Group Names and Phone Numbers
+Looking at the logs from your text file and examining your GroupMessageMonitor.js code alongside the WaSender API documentation, I can identify two key issues:
+1. Group Names Coming as IDs
+In your logs (lines 1441, 1444, etc.), I notice group identifiers appearing in this format:
+"from":"120363312118373656@newsletter"
+This is because WhatsApp group identifiers (JIDs or Jabber IDs) are encoded differently than how they're displayed in the WhatsApp UI:
+
+What you're getting: Raw numeric JID (e.g., 120363312118373656@newsletter or 123456789@g.us)
+What you expect: Human-readable group name (e.g., "Family Group", "Work Team")
+
+2. Phone Numbers Not Displaying Properly
+Similarly, phone numbers are being shown in their raw JID format rather than in the international phone number format you're expecting.
+The Solution
+The issue is in how you're handling the response from the WaSender API. When you receive a message from a group, the remoteJid or from field contains the technical identifier, not the display name. You need to:
+
+For Group Names: Use the group's JID to fetch the group metadata, which contains the actual group name:
+
+javascript// After receiving a message with groupJid
+async function getGroupName(groupJid) {
+    try {
+        // Call the WaSender API to get group metadata
+        const response = await axios.get(`https://www.wasenderapi.com/api/groups/${groupJid}/metadata`, {
+            headers: { 'Authorization': `Bearer ${YOUR_API_KEY}` }
+        });
+        
+        if (response.data.success) {
+            // The actual group name is in the 'subject' field
+            return response.data.data.subject;
+        }
+        return null;
+    } catch (error) {
+        console.error('Error fetching group name:', error.message);
+        return null;
+    }
+}
+
+For Phone Numbers: Parse the JID to extract and format the phone number correctly:
+
+javascriptfunction formatPhoneNumber(jid) {
+    // Remove the @s.whatsapp.net or other suffix
+    const phoneNumber = jid.split('@')[0];
+    
+    // Format as international number if needed
+    // You may need to add '+' and handle country codes as required
+    return `+${phoneNumber}`;
+}
+
+Implementation in Your Code: In your GroupMessageMonitor class, modify the extractAndNormalizeMessage method to fetch and use the proper group names. Looking at your code, you'll need to enhance the section around line 106:
+
+javascript// Extract and normalize message data with enhanced processing
+const normalizedMessage = await this.extractAndNormalizeMessage(messageData, metadata);
+
+// If this is a group message, fetch the proper group name
+if (normalizedMessage.groupInfo && normalizedMessage.groupInfo.groupId) {
+    try {
+        const groupName = await this.fetchGroupName(normalizedMessage.groupInfo.groupId);
+        if (groupName) {
+            normalizedMessage.groupInfo.groupName = groupName;
+        }
+    } catch (error) {
+        logger.warn('Failed to fetch group name', { 
+            groupId: normalizedMessage.groupInfo.groupId,
+            error: error.message 
+        });
+    }
+}
+Additional Implementation Details
+
+Cache Group Names: To avoid excessive API calls, you should cache group names:
+
+javascript// Add this to your GroupMessageMonitor class
+async fetchGroupName(groupJid) {
+    // Check cache first
+    if (this.groupCache.has(groupJid) && this.groupCache.get(groupJid).name) {
+        return this.groupCache.get(groupJid).name;
+    }
+    
+    // Fetch from API if not in cache
+    try {
+        const response = await axios.get(`https://www.wasenderapi.com/api/groups/${groupJid}/metadata`, {
+            headers: { 'Authorization': `Bearer ${this.apiKey}` }
+        });
+        
+        if (response.data.success) {
+            const groupName = response.data.data.subject;
+            
+            // Update cache
+            if (this.groupCache.has(groupJid)) {
+                const cachedData = this.groupCache.get(groupJid);
+                cachedData.name = groupName;
+                this.groupCache.set(groupJid, cachedData);
+            } else {
+                this.groupCache.set(groupJid, { name: groupName });
+            }
+            
+            return groupName;
+        }
+    } catch (error) {
+        logger.error('Error fetching group metadata', {
+            groupJid,
+            error: error.message
+        });
+    }
+    
+    return null;
+}
+
+Modify Your Logging: Update your logging to use the resolved names:
+
+javascriptlogger.info('Group message processed successfully', {
+    messageId,
+    groupId: normalizedMessage.groupInfo.groupId,
+    groupName: normalizedMessage.groupInfo.groupName || 'Unknown Group', // Fallback if name fetch fails
+    messageType: normalizedMessage.messageType,
+    // ...other fields
+});
+Recommended Changes to Your Code
+Based on your GroupMessageMonitor.js file, I recommend:
+
+Add a proper group metadata fetch method to resolve group names
+Enhance your phone number formatting
+Update your database storage to save both the technical IDs and the display names
+Implement retry logic for API calls that might fail
+Consider using batch operations for fetching multiple group details at once
+
+These changes will ensure you get proper group names instead of raw JIDs and correctly formatted phone numbers in your application

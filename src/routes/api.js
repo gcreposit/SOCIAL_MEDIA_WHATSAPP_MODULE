@@ -69,29 +69,99 @@ module.exports = function(dbService, documentViewerService = null) {
   router.get('/whatsapp/status', async (req, res) => {
     try {
       console.log('API: Status request received');
-      console.log('API: global.app exists:', !!global.app);
-      console.log('API: global.app.whatsappClient exists:', !!global.app?.whatsappClient);
       
-      // Get WhatsApp client instance from global app
-      const whatsappClient = global.app?.whatsappClient;
-      
-      if (!whatsappClient) {
-        console.log('API: WhatsApp client not initialized');
-        return res.json({
+      // Use Wasender SessionManager (new architecture)
+      const sessionManager = global.app?.sessionManager;
+      if (!sessionManager) {
+        console.log('API: Wasender SessionManager not initialized');
+        return res.status(503).json({
           authenticated: false,
-          message: 'WhatsApp client not initialized'
+          status: 'service_unavailable',
+          message: 'Wasender SessionManager not initialized',
+          architecture: 'wasender',
+          error: 'Service not available'
         });
       }
       
-      console.log('API: Calling getStatus...');
-      const status = whatsappClient.getStatus();
-      console.log('API: Returning status:', JSON.stringify(status, null, 2));
-      res.json(status);
+      console.log('API: Using Wasender SessionManager');
+      const sessionInfo = sessionManager.getSessionInfo();
+      const status = await sessionManager.getSessionStatus();
+      
+      return res.json({
+        authenticated: status.status === 'connected',
+        isAuthenticated: status.status === 'connected',
+        isReady: status.status === 'connected',
+        status: status.status,
+        sessionId: sessionInfo.sessionId,
+        sessionName: sessionInfo.sessionName,
+        message: status.message || `Session status: ${status.status}`,
+        architecture: 'wasender',
+        sessionInfo: {
+          createdAt: sessionInfo.createdAt,
+          lastSuccessfulConnection: sessionInfo.lastSuccessfulConnection,
+          reconnectAttempts: sessionInfo.reconnectAttempts,
+          isMonitoring: sessionInfo.isMonitoring,
+          connectionFailures: sessionInfo.connectionFailures
+        }
+      });
     } catch (error) {
       console.error('Error getting WhatsApp status:', error);
       res.status(500).json({ 
         authenticated: false,
-        error: 'Failed to get WhatsApp status' 
+        isAuthenticated: false,
+        isReady: false,
+        status: 'error',
+        architecture: 'wasender',
+        error: 'Failed to get WhatsApp status',
+        message: error.message
+      });
+    }
+  });
+
+  /**
+   * Get QR code for authentication
+   * GET /api/whatsapp/qr
+   */
+  router.get('/whatsapp/qr', async (req, res) => {
+    try {
+      // Use Wasender SessionManager (new architecture)
+      const sessionManager = global.app?.sessionManager;
+      if (!sessionManager) {
+        console.log('API: Wasender SessionManager not initialized');
+        return res.status(503).json({
+          success: false,
+          error: 'Wasender SessionManager not initialized',
+          architecture: 'wasender'
+        });
+      }
+      
+      console.log('API: Getting QR code from Wasender SessionManager');
+      
+      const sessionInfo = sessionManager.getSessionInfo();
+      if (!sessionInfo.sessionId) {
+        // Create session if none exists
+        console.log('API: Creating new session for QR code');
+        await sessionManager.createSession();
+      }
+      
+      const qrData = await sessionManager.getQRCode();
+      
+      return res.json({
+        success: true,
+        qrCode: qrData.qrCode,
+        sessionId: sessionInfo.sessionId,
+        sessionName: sessionInfo.sessionName,
+        architecture: 'wasender',
+        timestamp: qrData.timestamp || new Date().toISOString(),
+        qrCodeTime: qrData.timestamp || new Date().toISOString()
+      });
+    } catch (error) {
+      console.error('Error getting QR code:', error);
+      res.status(500).json({ 
+        success: false,
+        error: 'Failed to get QR code',
+        message: error.message,
+        architecture: 'wasender'
       });
     }
   });
@@ -102,20 +172,45 @@ module.exports = function(dbService, documentViewerService = null) {
    */
   router.post('/whatsapp/refresh-qr', async (req, res) => {
     try {
-      const whatsappClient = global.app?.whatsappClient;
-      
-      if (!whatsappClient) {
-        return res.status(400).json({
-          error: 'WhatsApp client not initialized'
+      // Use Wasender SessionManager (new architecture)
+      const sessionManager = global.app?.sessionManager;
+      if (!sessionManager) {
+        console.log('API: Wasender SessionManager not initialized');
+        return res.status(503).json({
+          success: false,
+          error: 'Wasender SessionManager not initialized',
+          architecture: 'wasender'
         });
       }
       
-      await whatsappClient.refreshQRCode();
-      res.json({ success: true, message: 'QR code refresh requested' });
+      console.log('API: Refreshing QR code via Wasender SessionManager');
+      
+      const sessionInfo = sessionManager.getSessionInfo();
+      if (!sessionInfo.sessionId) {
+        // Create session if none exists
+        console.log('API: Creating new session for QR refresh');
+        await sessionManager.createSession();
+      }
+      
+      // Get fresh QR code
+      const qrData = await sessionManager.getQRCode();
+      
+      return res.json({
+        success: true,
+        message: 'QR code refreshed successfully',
+        qrCode: qrData.qrCode,
+        sessionId: sessionInfo.sessionId,
+        sessionName: sessionInfo.sessionName,
+        architecture: 'wasender',
+        timestamp: qrData.timestamp || new Date().toISOString()
+      });
     } catch (error) {
       console.error('Error refreshing QR code:', error);
       res.status(500).json({ 
-        error: 'Failed to refresh QR code' 
+        success: false,
+        error: 'Failed to refresh QR code',
+        message: error.message,
+        architecture: 'wasender'
       });
     }
   });
@@ -126,25 +221,34 @@ module.exports = function(dbService, documentViewerService = null) {
    */
   router.post('/whatsapp/force-logout', async (req, res) => {
     try {
-      const whatsappClient = global.app?.whatsappClient;
-      
-      if (!whatsappClient) {
-        return res.status(400).json({
-          error: 'WhatsApp client not initialized'
+      // Use Wasender SessionManager (new architecture)
+      const sessionManager = global.app?.sessionManager;
+      if (!sessionManager) {
+        console.log('API: Wasender SessionManager not initialized');
+        return res.status(503).json({
+          success: false,
+          error: 'Wasender SessionManager not initialized',
+          architecture: 'wasender'
         });
       }
       
-      console.log('API: Force logout requested');
-      await whatsappClient.forceSessionExpiry();
+      console.log('API: Force logout requested via Wasender');
+      
+      // Disconnect the current session
+      await sessionManager.disconnectSession();
       
       res.json({ 
         success: true, 
-        message: 'WhatsApp session has been forcefully cleared. Please scan QR code to reconnect.' 
+        message: 'WhatsApp session has been disconnected. Please scan QR code to reconnect.',
+        architecture: 'wasender'
       });
     } catch (error) {
       console.error('Error forcing WhatsApp logout:', error);
       res.status(500).json({ 
-        error: 'Failed to force logout' 
+        success: false,
+        error: 'Failed to force logout',
+        message: error.message,
+        architecture: 'wasender'
       });
     }
   });
@@ -155,113 +259,371 @@ module.exports = function(dbService, documentViewerService = null) {
    */
   router.get('/whatsapp/session-status', async (req, res) => {
     try {
-      const whatsappClient = global.app?.whatsappClient;
-      
-      if (!whatsappClient) {
-        return res.status(400).json({
-          error: 'WhatsApp client not initialized'
-        });
-      }
-      
-      const sessionCreatedAt = whatsappClient.sessionCreatedAt;
-      const sessionExpiryDays = whatsappClient.sessionExpiryDays;
-      
-      if (!sessionCreatedAt) {
-        return res.json({
+      // Use Wasender SessionManager (new architecture)
+      const sessionManager = global.app?.sessionManager;
+      if (!sessionManager) {
+        console.log('API: Wasender SessionManager not initialized');
+        return res.status(503).json({
           sessionActive: false,
-          message: 'No active session found'
+          status: 'service_unavailable',
+          error: 'Wasender SessionManager not initialized',
+          architecture: 'wasender'
         });
       }
       
-      const now = new Date();
-      const sessionAge = Math.floor((now - sessionCreatedAt) / (1000 * 60 * 60 * 24));
-      const daysRemaining = Math.max(0, sessionExpiryDays - sessionAge);
-      const expiryDate = new Date(sessionCreatedAt.getTime() + (sessionExpiryDays * 24 * 60 * 60 * 1000));
+      console.log('API: Getting session status from Wasender SessionManager');
       
-      res.json({
-        sessionActive: true,
-        sessionCreatedAt: sessionCreatedAt.toISOString(),
-        sessionExpiryDays,
-        sessionAge,
-        daysRemaining,
-        expiryDate: expiryDate.toISOString(),
-        willExpireToday: daysRemaining === 0
+      const sessionInfo = sessionManager.getSessionInfo();
+      const status = await sessionManager.getSessionStatus();
+      
+      return res.json({
+        sessionActive: status.status === 'connected',
+        status: status.status,
+        sessionId: sessionInfo.sessionId,
+        sessionName: sessionInfo.sessionName,
+        sessionCreatedAt: sessionInfo.createdAt?.toISOString(),
+        lastSuccessfulConnection: sessionInfo.lastSuccessfulConnection?.toISOString(),
+        lastStatusCheck: sessionInfo.lastStatusCheck?.toISOString(),
+        reconnectAttempts: sessionInfo.reconnectAttempts,
+        connectionFailures: sessionInfo.connectionFailures,
+        isMonitoring: sessionInfo.isMonitoring,
+        architecture: 'wasender',
+        message: status.message || `Session status: ${status.status}`,
+        // Additional Wasender-specific fields
+        sessionHealth: {
+          uptime: sessionInfo.lastSuccessfulConnection ? 
+            Date.now() - sessionInfo.lastSuccessfulConnection.getTime() : null,
+          healthScore: sessionInfo.connectionFailures < 3 ? 'good' : 
+            sessionInfo.connectionFailures < 10 ? 'warning' : 'critical'
+        }
       });
     } catch (error) {
       console.error('Error getting session status:', error);
       res.status(500).json({ 
-        error: 'Failed to get session status' 
+        sessionActive: false,
+        status: 'error',
+        error: 'Failed to get session status',
+        message: error.message,
+        architecture: 'wasender'
       });
     }
   });
 
   /**
-   * Trigger MongoDB session cleanup (for RemoteAuth chunks)
-   * POST /api/cleanup/mongo-sessions
+   * Wasender-specific session management endpoints
    */
-  router.post('/cleanup/mongo-sessions', async (req, res) => {
+
+  /**
+   * Get Wasender session status
+   * GET /api/wasender/session-status
+   */
+  router.get('/wasender/session-status', async (req, res) => {
     try {
-      // MongoDB session cleanup service has been disabled
-      return res.status(400).json({
-        error: 'MongoDB session cleanup service has been disabled'
-      });
-      
-      /* Service disabled
-      const mongoSessionCleanupService = global.app?.mongoSessionCleanupService;
-      
-      if (!mongoSessionCleanupService) {
-        return res.status(400).json({
-          error: 'MongoDB session cleanup service not available'
+      const sessionManager = global.app?.sessionManager;
+      if (!sessionManager) {
+        return res.status(503).json({
+          success: false,
+          error: 'Wasender SessionManager not initialized',
+          architecture: 'wasender'
         });
       }
       
-      // Trigger session cleanup in background
-      mongoSessionCleanupService.triggerManualSessionCleanup().catch(console.error);
+      const sessionInfo = sessionManager.getSessionInfo();
+      const status = await sessionManager.getSessionStatus();
       
-      res.json({ 
-        success: true, 
-        message: 'MongoDB session cleanup triggered successfully',
-        note: 'This only cleans WhatsApp session data, NOT your messages'
+      res.json({
+        success: true,
+        sessionInfo: {
+          sessionId: sessionInfo.sessionId,
+          sessionName: sessionInfo.sessionName,
+          createdAt: sessionInfo.createdAt?.toISOString(),
+          lastSuccessfulConnection: sessionInfo.lastSuccessfulConnection?.toISOString(),
+          lastStatusCheck: sessionInfo.lastStatusCheck?.toISOString(),
+          reconnectAttempts: sessionInfo.reconnectAttempts,
+          connectionFailures: sessionInfo.connectionFailures,
+          isMonitoring: sessionInfo.isMonitoring
+        },
+        status: {
+          status: status.status,
+          message: status.message,
+          connected: status.status === 'connected',
+          needsQR: status.status === 'qr' || status.status === 'created'
+        },
+        health: {
+          uptime: sessionInfo.lastSuccessfulConnection ? 
+            Date.now() - sessionInfo.lastSuccessfulConnection.getTime() : null,
+          healthScore: sessionInfo.connectionFailures < 3 ? 'good' : 
+            sessionInfo.connectionFailures < 10 ? 'warning' : 'critical',
+          lastError: sessionInfo.lastError
+        },
+        timestamp: new Date().toISOString(),
+        architecture: 'wasender'
       });
-      */
     } catch (error) {
-      console.error('Error triggering MongoDB session cleanup:', error);
+      console.error('Error getting Wasender session status:', error);
       res.status(500).json({ 
-        error: 'Failed to trigger MongoDB session cleanup' 
+        success: false,
+        error: 'Failed to get Wasender session status',
+        message: error.message,
+        architecture: 'wasender'
       });
     }
   });
 
   /**
-   * Get MongoDB session storage info
-   * GET /api/cleanup/mongo-sessions/info
+   * Reconnect Wasender session
+   * POST /api/wasender/reconnect
    */
-  router.get('/cleanup/mongo-sessions/info', async (req, res) => {
+  router.post('/wasender/reconnect', async (req, res) => {
     try {
-      // MongoDB session cleanup service has been disabled
-      return res.status(400).json({
-        error: 'MongoDB session cleanup service has been disabled'
-      });
-      
-      /* Service disabled
-      const mongoSessionCleanupService = global.app?.mongoSessionCleanupService;
-      
-      if (!mongoSessionCleanupService) {
-        return res.status(400).json({
-          error: 'MongoDB session cleanup service not available'
+      const sessionManager = global.app?.sessionManager;
+      if (!sessionManager) {
+        return res.status(503).json({
+          success: false,
+          error: 'Wasender SessionManager not initialized',
+          architecture: 'wasender'
         });
       }
       
-      const info = await mongoSessionCleanupService.getSessionStorageInfo();
-      res.json(info);
-      */
+      console.log('API: Manual reconnection requested');
+      
+      const sessionInfo = sessionManager.getSessionInfo();
+      if (!sessionInfo.sessionId) {
+        // Create session if none exists
+        console.log('API: Creating new session for reconnection');
+        await sessionManager.createSession();
+      }
+      
+      // Attempt to connect the session
+      const result = await sessionManager.connectSession();
+      
+      res.json({
+        success: true,
+        message: 'Reconnection initiated successfully',
+        sessionId: sessionInfo.sessionId,
+        sessionName: sessionInfo.sessionName,
+        result: result,
+        timestamp: new Date().toISOString(),
+        architecture: 'wasender'
+      });
     } catch (error) {
-      console.error('Error getting MongoDB session info:', error);
+      console.error('Error reconnecting Wasender session:', error);
       res.status(500).json({ 
-        error: 'Failed to get MongoDB session info' 
+        success: false,
+        error: 'Failed to reconnect session',
+        message: error.message,
+        architecture: 'wasender'
       });
     }
   });
+
+  /**
+   * Create new Wasender session
+   * POST /api/wasender/create-session
+   */
+  router.post('/wasender/create-session', async (req, res) => {
+    try {
+      const sessionManager = global.app?.sessionManager;
+      if (!sessionManager) {
+        return res.status(400).json({
+          error: 'Wasender SessionManager not initialized'
+        });
+      }
+      
+      const { sessionName, phoneNumber } = req.body;
+      
+      console.log('API: Creating new session', { sessionName, phoneNumber });
+      
+      const response = await sessionManager.createSession(sessionName, phoneNumber);
+      
+      res.json({
+        success: true,
+        message: 'Session created successfully',
+        sessionId: response.sessionId,
+        sessionName: sessionName || sessionManager.sessionName,
+        timestamp: new Date().toISOString()
+      });
+    } catch (error) {
+      console.error('Error creating Wasender session:', error);
+      res.status(500).json({ 
+        error: 'Failed to create session',
+        message: error.message
+      });
+    }
+  });
+
+  /**
+   * Disconnect Wasender session
+   * POST /api/wasender/disconnect
+   */
+  router.post('/wasender/disconnect', async (req, res) => {
+    try {
+      const sessionManager = global.app?.sessionManager;
+      if (!sessionManager) {
+        return res.status(503).json({
+          success: false,
+          error: 'Wasender SessionManager not initialized',
+          architecture: 'wasender'
+        });
+      }
+      
+      console.log('API: Disconnecting session');
+      
+      const response = await sessionManager.disconnectSession();
+      
+      res.json({
+        success: true,
+        message: 'Session disconnected successfully',
+        response,
+        timestamp: new Date().toISOString(),
+        architecture: 'wasender'
+      });
+    } catch (error) {
+      console.error('Error disconnecting Wasender session:', error);
+      res.status(500).json({ 
+        success: false,
+        error: 'Failed to disconnect session',
+        message: error.message,
+        architecture: 'wasender'
+      });
+    }
+  });
+
+  /**
+   * Get WhatsApp groups information via Wasender API
+   * GET /api/wasender/groups
+   */
+  router.get('/wasender/groups', async (req, res) => {
+    try {
+      const sessionManager = global.app?.sessionManager;
+      if (!sessionManager) {
+        return res.status(503).json({
+          success: false,
+          error: 'Wasender SessionManager not initialized',
+          architecture: 'wasender'
+        });
+      }
+      
+      // Check if session is connected
+      const status = await sessionManager.getSessionStatus();
+      if (status.status !== 'connected') {
+        return res.status(400).json({
+          success: false,
+          error: 'WhatsApp session not connected',
+          status: status.status,
+          message: 'Please connect to WhatsApp first',
+          architecture: 'wasender'
+        });
+      }
+      
+      console.log('API: Getting groups information from database');
+      
+      // Get groups from database (captured via webhooks)
+      const groups = await dbService.getAllGroups();
+      
+      // Enhance with Wasender session info
+      const sessionInfo = sessionManager.getSessionInfo();
+      
+      res.json({
+        success: true,
+        groups: groups.map(group => ({
+          groupId: group.group_id,
+          groupName: group.group_name,
+          messageCount: group.message_count,
+          lastMessageTime: group.last_message_time,
+          // Add Wasender-specific metadata
+          platform: 'whatsapp',
+          source: 'wasender_webhook',
+          isActive: true
+        })),
+        totalGroups: groups.length,
+        sessionInfo: {
+          sessionId: sessionInfo.sessionId,
+          sessionName: sessionInfo.sessionName,
+          isMonitoring: sessionInfo.isMonitoring
+        },
+        timestamp: new Date().toISOString(),
+        architecture: 'wasender'
+      });
+    } catch (error) {
+      console.error('Error getting Wasender groups:', error);
+      res.status(500).json({ 
+        success: false,
+        error: 'Failed to get groups information',
+        message: error.message,
+        architecture: 'wasender'
+      });
+    }
+  });
+
+  /**
+   * Get Wasender webhook metrics and statistics
+   * GET /api/wasender/metrics
+   */
+  router.get('/wasender/metrics', async (req, res) => {
+    try {
+      const sessionManager = global.app?.sessionManager;
+      if (!sessionManager) {
+        return res.status(503).json({
+          success: false,
+          error: 'Wasender SessionManager not initialized',
+          architecture: 'wasender'
+        });
+      }
+      
+      // Get webhook handler metrics if available
+      const webhookHandler = global.app?.webhookHandler;
+      let webhookMetrics = null;
+      
+      if (webhookHandler && typeof webhookHandler.getMetrics === 'function') {
+        webhookMetrics = webhookHandler.getMetrics();
+      }
+      
+      // Get session info
+      const sessionInfo = sessionManager.getSessionInfo();
+      const status = await sessionManager.getSessionStatus();
+      
+      // Get database statistics
+      const groups = await dbService.getAllGroups();
+      const totalMessages = groups.reduce((sum, group) => sum + group.message_count, 0);
+      
+      res.json({
+        success: true,
+        metrics: {
+          session: {
+            status: status.status,
+            uptime: sessionInfo.lastSuccessfulConnection ? 
+              Date.now() - sessionInfo.lastSuccessfulConnection.getTime() : null,
+            reconnectAttempts: sessionInfo.reconnectAttempts,
+            connectionFailures: sessionInfo.connectionFailures,
+            isMonitoring: sessionInfo.isMonitoring
+          },
+          webhook: webhookMetrics || {
+            message: 'Webhook metrics not available'
+          },
+          database: {
+            totalGroups: groups.length,
+            totalMessages: totalMessages,
+            activeGroups: groups.filter(g => 
+              new Date(g.last_message_time) > new Date(Date.now() - 24 * 60 * 60 * 1000)
+            ).length
+          }
+        },
+        timestamp: new Date().toISOString(),
+        architecture: 'wasender'
+      });
+    } catch (error) {
+      console.error('Error getting Wasender metrics:', error);
+      res.status(500).json({ 
+        success: false,
+        error: 'Failed to get metrics',
+        message: error.message,
+        architecture: 'wasender'
+      });
+    }
+  });
+
+
 
   /**
    * Get document statistics

@@ -62,7 +62,7 @@ class WhatsAppGroupCapture {
       console.log('✅ Wasender API client ready');
 
       // Skip ngrok - using manual ngrok tunnel
-      console.log('✅ Using manual ngrok tunnel: https://10eeedbd03b4.ngrok-free.app');
+      console.log('✅ Using manual ngrok tunneling or http://matrixsession.gccloud.in/');
 
       // Start web server
       if (startWebServer) {

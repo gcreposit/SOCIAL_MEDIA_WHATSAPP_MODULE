@@ -254,6 +254,11 @@
                 <div id="status-container">
                     <div class="loading-spinner"></div>
                     <p>Checking authentication status...</p>
+                    <div id="status-details"
+                        style="margin-top: 15px; padding: 10px; background: #f8f9fa; border-radius: 6px; font-size: 14px; color: #6c757d;">
+                        <div>🔍 Checking session status...</div>
+                        <div id="attempt-counter" style="margin-top: 5px;">Attempt 1 of 3</div>
+                    </div>
                 </div>
 
                 <div class="connection-status">
@@ -277,7 +282,7 @@
                             <span id="qr-age-time">--:--</span>
                         </div>
                         <div class="qr-info" style="font-size: 12px; color: #6c757d; margin-top: 8px;">
-                            <span>⏱️ New QR code auto-generates every 20 seconds</span>
+                            <span>⏱️ QR Code 1/3 - Auto-generates every 45 seconds</span>
                         </div>
                     </div>
 
@@ -293,9 +298,6 @@
 
                     <div class="qr-actions">
                         <button class="refresh-btn" onclick="refreshQR()">🔄 Refresh QR Code</button>
-                        <button class="refresh-btn" onclick="forceReconnect()" style="background: #17a2b8; margin-left: 10px;">
-                            🔗 Force Reconnect
-                        </button>
                     </div>
                 </div>
 
@@ -344,44 +346,63 @@
     <script>
         let statusCheckInterval;
         let qrTimerInterval;
+        let autoRefreshInterval;
         let qrGeneratedTime = null;
-        const QR_EXPIRY_TIME = 20000; // 20 seconds (WhatsApp QR codes actually expire after 20 seconds)
+        const QR_EXPIRY_TIME = 45000; // 45 seconds
         let lastAuthCheck = 0;
         let qrAttemptCount = 0;
+        let maxQRAttempts = 3; // Maximum 3 QR attempts
         let firstQRTime = null;
-        
+        let lastStatusCheck = 0;
+        const MIN_STATUS_CHECK_INTERVAL = 5000; // Minimum 5 seconds between status checks
+        let isAuthenticated = false;
+        let isGeneratingQR = false; // Flag to prevent multiple QR generations
+
         // Initialize Socket.io connection
         const socket = io();
-        
+
         // Listen for real-time WhatsApp status updates
         socket.on('whatsapp-status-update', (status) => {
             console.log('Received real-time status update:', status);
             handleStatusUpdate(status);
         });
-        
+
         // Handle status updates (both from polling and real-time)
         function handleStatusUpdate(data) {
             console.log('Handling status update:', data);
             hideAllContainers();
 
             if (data.isAuthenticated === true && data.isReady === true) {
-                console.log('Authentication detected!');
+                console.log('Authentication detected! Showing authenticated state...');
+                isAuthenticated = true;
                 updateConnectionStatus('connected', `Connected as: ${data.businessNumber || 'WhatsApp User'}`);
                 showAuthenticated(data.businessNumber);
                 clearAllIntervals();
+
+                // Only refresh page once if not already authenticated
+                if (!sessionStorage.getItem('wasAuthenticated')) {
+                    sessionStorage.setItem('wasAuthenticated', 'true');
+                    setTimeout(() => {
+                        window.location.reload();
+                    }, 2000);
+                }
+
             } else if (data.qrCode) {
-                updateConnectionStatus('connecting', 'Waiting for QR scan...');
+                // Clear "Getting QR code" message and show QR
+                updateConnectionStatus('connecting', 'Scan QR Code to connect');
                 showQRCode(data.qrCode, data.qrCodeTime);
-                // Continue checking status while waiting for scan - increase frequency when waiting for auth
+
+                // Continue checking status while waiting for scan
                 if (!statusCheckInterval) {
-                    statusCheckInterval = setInterval(checkStatus, 2000); // Check every 2 seconds
+                    statusCheckInterval = setInterval(checkStatus, 10000); // Check every 10 seconds
                 }
             } else {
-                updateConnectionStatus('connecting', data.message || 'Waiting for QR code...');
+                updateConnectionStatus('connecting', data.message || 'Initializing...');
                 showError(data.message || 'Waiting for QR code...');
-                // Retry more frequently if no QR code yet
+
+                // Retry if no QR code yet
                 if (!statusCheckInterval) {
-                    statusCheckInterval = setInterval(checkStatus, 3000);
+                    statusCheckInterval = setInterval(checkStatus, 8000); // Check every 8 seconds
                 }
             }
         }
@@ -389,6 +410,14 @@
         // Check authentication status
         async function checkStatus() {
             try {
+                // Rate limiting: prevent too frequent API calls
+                const now = Date.now();
+                if (now - lastStatusCheck < MIN_STATUS_CHECK_INTERVAL) {
+                    console.log('Rate limiting: Skipping status check (too frequent)');
+                    return;
+                }
+                lastStatusCheck = now;
+
                 updateConnectionStatus('connecting', 'Checking status...');
 
                 const response = await fetch('/api/whatsapp/status');
@@ -398,7 +427,7 @@
 
                 const data = await response.json();
                 console.log('Status response:', data); // Debug log
-                
+
                 // Handle different architectures
                 if (data.architecture === 'wasender') {
                     await handleWasenderStatus(data);
@@ -412,17 +441,17 @@
                         qrCodeTime: data.qrCodeTime,
                         message: data.message
                     };
-                    
+
                     handleStatusUpdate(normalizedData);
                 }
-                
+
             } catch (error) {
                 console.error('Error checking status:', error);
                 updateConnectionStatus('error', 'Server connection failed');
                 showError('Unable to connect to server. Please check if the application is running.');
                 // Retry connection errors more slowly
                 if (!statusCheckInterval) {
-                    statusCheckInterval = setInterval(checkStatus, 5000);
+                    statusCheckInterval = setInterval(checkStatus, 15000); // Check every 15 seconds for errors
                 }
             }
         }
@@ -430,26 +459,42 @@
         // Handle Wasender API status
         async function handleWasenderStatus(data) {
             console.log('Handling Wasender status:', data);
-            
+
             if (data.authenticated && data.status === 'connected') {
-                // Session is connected
+                // Session is connected - show authenticated state
+                console.log('Wasender session connected! Showing authenticated state...');
+                isAuthenticated = true;
                 updateConnectionStatus('connected', `Connected via Wasender API`);
                 showAuthenticated(data.sessionInfo?.sessionName || data.sessionName || 'Wasender Session');
                 clearAllIntervals();
-            } else if (data.status === 'qr' || data.status === 'created') {
-                // Need QR code authentication
-                updateConnectionStatus('connecting', 'QR code authentication required...');
-                await fetchAndShowQRCode();
+
+                // Only refresh page once if not already authenticated
+                if (!sessionStorage.getItem('wasAuthenticated')) {
+                    sessionStorage.setItem('wasAuthenticated', 'true');
+                    setTimeout(() => {
+                        window.location.reload();
+                    }, 2000);
+                }
+
+            } else if (data.status === 'need_scan' || data.status === 'qr' || data.status === 'created') {
+                // Check if we've exceeded max attempts
+                if (qrAttemptCount >= maxQRAttempts) {
+                    showQRAttemptsExhausted();
+                    return;
+                }
+
+                // Need QR code authentication - first connect then get QR
+                updateConnectionStatus('connecting', 'Initializing QR code authentication...');
+                await connectAndShowQRCode();
             } else if (data.status === 'connecting') {
                 updateConnectionStatus('connecting', 'Connecting to WhatsApp...');
                 // Continue checking status
                 if (!statusCheckInterval) {
-                    statusCheckInterval = setInterval(checkStatus, 2000);
+                    statusCheckInterval = setInterval(checkStatus, 12000); // Check every 12 seconds
                 }
             } else if (data.status === 'disconnected') {
                 updateConnectionStatus('error', 'Session disconnected');
                 showError('WhatsApp session is disconnected. Please reconnect.');
-                // Add reconnect option
                 addReconnectButton();
             } else if (data.status === 'service_unavailable') {
                 updateConnectionStatus('error', 'Service unavailable');
@@ -458,14 +503,47 @@
                 updateConnectionStatus('connecting', data.message || 'Initializing session...');
                 // Continue checking status
                 if (!statusCheckInterval) {
-                    statusCheckInterval = setInterval(checkStatus, 3000);
+                    statusCheckInterval = setInterval(checkStatus, 15000); // Check every 15 seconds
                 }
+            }
+        }
+
+        // Connect session and show QR code for Wasender API
+        async function connectAndShowQRCode() {
+            try {
+                updateConnectionStatus('connecting', 'Connecting session...');
+
+                // First, try to connect the session
+                const connectResponse = await fetch('/api/wasender/reconnect', { method: 'POST' });
+                const connectData = await connectResponse.json();
+
+                console.log('Connect response:', connectData);
+
+                // Wait a moment for the session to initialize
+                await new Promise(resolve => setTimeout(resolve, 2000));
+
+                // Now get the QR code
+                await fetchAndShowQRCode();
+
+            } catch (error) {
+                console.error('Error connecting and showing QR code:', error);
+                showError('Failed to initialize QR code: ' + error.message);
             }
         }
 
         // Fetch and show QR code for Wasender API
         async function fetchAndShowQRCode() {
             try {
+                // Prevent multiple simultaneous QR fetches
+                if (isGeneratingQR) {
+                    console.log('QR fetch already in progress, skipping...');
+                    return;
+                }
+
+                isGeneratingQR = true;
+                console.log('Starting QR fetch...');
+                updateConnectionStatus('connecting', 'Getting QR code...');
+
                 const response = await fetch('/api/whatsapp/qr');
                 if (!response.ok) {
                     throw new Error(`HTTP ${response.status}: ${response.statusText}`);
@@ -475,17 +553,21 @@
                 console.log('QR response:', data);
 
                 if (data.success && data.qrCode) {
+                    // Clear the "Getting QR code" message before showing QR
+                    updateConnectionStatus('connecting', 'Scan QR Code to connect');
                     showQRCode(data.qrCode, data.timestamp);
                     // Continue checking status while waiting for scan
                     if (!statusCheckInterval) {
-                        statusCheckInterval = setInterval(checkStatus, 2000);
+                        statusCheckInterval = setInterval(checkStatus, 10000); // Check every 10 seconds
                     }
                 } else {
+                    isGeneratingQR = false; // Reset flag before throwing error
                     throw new Error(data.error || 'Failed to get QR code');
                 }
             } catch (error) {
                 console.error('Error fetching QR code:', error);
                 showError('Failed to get QR code: ' + error.message);
+                isGeneratingQR = false; // Reset flag on error
             }
         }
 
@@ -512,63 +594,159 @@
         }
 
         // Show QR code with timer
+        // function showQRCode(qrData, qrCodeTime) {
+        //     try {
+        //         // Check if we've exceeded max attempts
+        //         if (qrAttemptCount >= maxQRAttempts) {
+        //             showQRAttemptsExhausted();
+        //             return;
+        //         }
+        //
+        //         console.log('showQRCode called with data:', !!qrData, 'server time:', qrCodeTime);
+        //
+        //         document.getElementById('qr-container').style.display = 'block';
+        //         document.getElementById('qr-image').src = `data:image/png;base64,${qrData}`;
+        //
+        //         // Track QR attempts
+        //         const isNewQR = !qrGeneratedTime || (qrCodeTime && new Date(qrCodeTime) > qrGeneratedTime);
+        //
+        //         if (isNewQR) {
+        //             qrAttemptCount++;
+        //             if (!firstQRTime) {
+        //                 firstQRTime = new Date();
+        //             }
+        //             console.log(`NEW QR #${qrAttemptCount}/${maxQRAttempts} generated`);
+        //         } else {
+        //             console.log(`Duplicate QR call ignored - still showing QR #${qrAttemptCount}/${maxQRAttempts}`);
+        //         }
+        //
+        //         // This is for the "ago" timer - time since it appeared on screen
+        //         // We set this to "now" so the "0:01 ago" counter is correct
+        //         qrGeneratedTime = new Date();
+        //         console.log(`QR display time (for 'ago' counter) set to client NOW: ${qrGeneratedTime.toISOString()}`);
+        //
+        //         // --- TIMER SYNC LOGIC ---
+        //         // Calculate the ACTUAL remaining time based on server delay
+        //         let actualRemainingTime = QR_EXPIRY_TIME; // Default to full 45s
+        //         if (qrCodeTime) {
+        //             const serverTime = new Date(qrCodeTime);
+        //             const serverAge = Date.now() - serverTime.getTime();
+        //             // Ensure at least 5 seconds on the timer
+        //             actualRemainingTime = Math.max(QR_EXPIRY_TIME - serverAge, 5000);
+        //             console.log(`Server QR age: ${serverAge}ms. Actual remaining time: ${actualRemainingTime}ms`);
+        //         } else {
+        //             console.log("No server qrCodeTime provided, defaulting to full 45s timer.");
+        //         }
+        //         // --- END TIMER SYNC LOGIC ---
+        //
+        //         updateQRAttemptDisplay();
+        //         updateQRAge(); // Start the "ago" timer
+        //
+        //         // Start VISUAL timer with the ACTUAL remaining time
+        //         startQRTimer(actualRemainingTime);
+        //
+        //         // Hide expired overlay
+        //         document.getElementById('qr-overlay').style.display = 'none';
+        //
+        //         // Schedule AUTO-REFRESH with the SAME actual remaining time
+        //         if (qrAttemptCount < maxQRAttempts) {
+        //             startAutoRefreshWithRemainingTime(actualRemainingTime);
+        //         }
+        //
+        //     } finally {
+        //         // Always reset the generating flag
+        //         isGeneratingQR = false;
+        //     }
+        // }
+
+
+        // Show QR code with timer
         function showQRCode(qrData, qrCodeTime) {
-            document.getElementById('qr-container').style.display = 'block';
-            document.getElementById('qr-image').src = `data:image/png;base64,${qrData}`;
+            try {
+                // Check if we've exceeded max attempts
+                if (qrAttemptCount >= maxQRAttempts) {
+                    showQRAttemptsExhausted();
+                    return;
+                }
 
-            // Track QR attempts
-            qrAttemptCount++;
-            if (!firstQRTime) {
-                firstQRTime = new Date();
-            }
+                console.log('showQRCode called with data:', !!qrData, 'server time:', qrCodeTime);
 
-            // Set QR generation time - sync with backend
-            if (qrCodeTime) {
-                qrGeneratedTime = new Date(qrCodeTime);
-                console.log(`QR #${qrAttemptCount} generated at:`, qrGeneratedTime.toISOString());
-            } else {
+                document.getElementById('qr-container').style.display = 'block';
+                document.getElementById('qr-image').src = `data:image/png;base64,${qrData}`;
+
+                // Track QR attempts
+                const isNewQR = !qrGeneratedTime || (qrCodeTime && new Date(qrCodeTime) > qrGeneratedTime);
+
+                if (isNewQR) {
+                    qrAttemptCount++;
+                    // Store attempt count in session storage
+                    sessionStorage.setItem('qrAttemptCount', qrAttemptCount.toString());
+                    if (!firstQRTime) {
+                        firstQRTime = new Date();
+                    }
+                    console.log(`NEW QR #${qrAttemptCount}/${maxQRAttempts} generated`);
+                } else {
+                    console.log(`Duplicate QR call ignored - still showing QR #${qrAttemptCount}/${maxQRAttempts}`);
+                }
+
+                // FIXED: Always set qrGeneratedTime to current time when QR is displayed on UI
                 qrGeneratedTime = new Date();
-                console.log(`QR #${qrAttemptCount} time not provided, using current time:`, qrGeneratedTime.toISOString());
+                console.log(`QR display time set to NOW: ${qrGeneratedTime.toISOString()}`);
+
+                // FIXED: Always use the full timer duration (45 seconds) from the moment QR appears on UI
+                // Remove server timestamp sync logic entirely
+                let actualRemainingTime = QR_EXPIRY_TIME; // Always use full 45s
+
+                updateQRAttemptDisplay();
+                updateQRAge(); // Start the "ago" timer
+
+                // Start VISUAL timer with the FULL time (45 seconds)
+                startQRTimer(actualRemainingTime);
+
+                // Hide expired overlay
+                document.getElementById('qr-overlay').style.display = 'none';
+
+                // Schedule AUTO-REFRESH with the FULL time (45 seconds)
+                if (qrAttemptCount < maxQRAttempts) {
+                    startAutoRefreshWithRemainingTime(actualRemainingTime);
+                }
+
+            } finally {
+                // Always reset the generating flag
+                isGeneratingQR = false;
             }
-
-            // Check if QR is already expired
-            const now = new Date();
-            const elapsed = now - qrGeneratedTime;
-            if (elapsed >= QR_EXPIRY_TIME) {
-                console.log('QR code is already expired, showing expired state');
-                showQRExpired();
-                return;
-            }
-
-            // Update QR age display
-            updateQRAge();
-
-            // Start timer
-            startQRTimer();
-
-            // Hide expired overlay
-            document.getElementById('qr-overlay').style.display = 'none';
         }
 
-        // Start QR timer
-        function startQRTimer() {
+
+
+        // Start QR timer - FIXED to use client time
+        // FIXED: Start QR timer based on a specific duration
+        function startQRTimer(durationInMs) {
             // Clear existing timer
             if (qrTimerInterval) {
                 clearInterval(qrTimerInterval);
             }
 
+            // Get the exact start time
+            const startTime = Date.now();
+            console.log(`Starting VISUAL timer for ${durationInMs}ms`);
+
             qrTimerInterval = setInterval(() => {
-                const now = new Date();
-                const elapsed = now - qrGeneratedTime;
-                const remaining = QR_EXPIRY_TIME - elapsed;
+                // Calculate remaining time based on elapsed time
+                const elapsed = Date.now() - startTime;
+                const remaining = durationInMs - elapsed;
 
                 if (remaining <= 0) {
                     // QR expired
                     showQRExpired();
                     clearInterval(qrTimerInterval);
 
-                    // QR expired - show message
-                    console.log('QR Code expired');
+                    // Check if we've reached max attempts
+                    if (qrAttemptCount >= maxQRAttempts) {
+                        console.log(`All ${maxQRAttempts} QR attempts exhausted`);
+                    } else {
+                        console.log(`Visual timer expired (was ${durationInMs / 1000}s long)`);
+                    }
                 } else {
                     // Update countdown
                     const seconds = Math.ceil(remaining / 1000);
@@ -578,17 +756,18 @@
                     const timerElement = document.getElementById('timer-countdown');
                     timerElement.textContent = `${minutes}:${remainingSeconds.toString().padStart(2, '0')}`;
 
-                    // Change color based on remaining time (20-second cycle)
+                    // Change color based on remaining time
                     timerElement.className = '';
-                    if (remaining < 5000) { // Less than 5 seconds - RED
+                    if (remaining < 10000) { // Less than 10 seconds - RED
                         timerElement.className = 'danger';
-                    } else if (remaining < 10000) { // Less than 10 seconds - YELLOW
+                    } else if (remaining < 20000) { // Less than 20 seconds - YELLOW
                         timerElement.className = 'warning';
                     }
-                    // 10-20 seconds stays BLUE (normal)
+                    // 20+ seconds stays BLUE (normal)
                 }
 
-                // Update QR age
+                // Update QR age (time since it appeared on UI)
+                // This is independent of the countdown and uses qrGeneratedTime
                 updateQRAge();
             }, 1000);
         }
@@ -618,6 +797,13 @@
         function showError(message) {
             document.getElementById('error-container').style.display = 'block';
             document.getElementById('error-message').textContent = message;
+
+            // Reset button to default retry behavior for regular errors
+            const retryBtn = document.querySelector('#error-container .refresh-btn');
+            if (retryBtn && !message.includes('exhausted')) {
+                retryBtn.textContent = '🔄 Retry';
+                retryBtn.onclick = checkStatus;
+            }
         }
 
         // Hide all containers
@@ -631,44 +817,174 @@
         // Refresh QR code
         async function refreshQR() {
             try {
+                // Prevent multiple simultaneous refreshes
+                if (isGeneratingQR) {
+                    console.log('QR refresh already in progress, skipping...');
+                    return;
+                }
+
+                // Hide error container and warning messages when refreshing
+                document.getElementById('error-container').style.display = 'none';
+
                 // Show loading state
                 const refreshBtn = document.querySelector('.refresh-btn');
-                const originalText = refreshBtn.textContent;
-                refreshBtn.textContent = '🔄 Refreshing...';
-                refreshBtn.disabled = true;
+                if (refreshBtn) {
+                    const originalText = refreshBtn.textContent;
+                    refreshBtn.textContent = '🔄 Refreshing...';
+                    refreshBtn.disabled = true;
+                }
+
+                // Clear all intervals to prevent conflicts
+                clearAllIntervals();
+
+                // Only reset counter if this is a manual refresh (not auto-refresh)
+                const isManualRefresh = event && event.target;
+                if (isManualRefresh) {
+                    console.log('Manual refresh - Resetting QR attempt counter to 0');
+                    qrAttemptCount = 0;
+                    firstQRTime = null;
+                    // Clear session storage when manually refreshing
+                    sessionStorage.removeItem('qrAttemptCount');
+                } else {
+                    console.log('Auto-refresh - Keeping current attempt count:', qrAttemptCount);
+                }
+
+                updateConnectionStatus('connecting', 'Getting fresh QR code...');
 
                 // First check if we're using Wasender API
                 const statusResponse = await fetch('/api/whatsapp/status');
                 const statusData = await statusResponse.json();
 
                 if (statusData.architecture === 'wasender') {
-                    // Use Wasender QR endpoint directly
-                    await fetchAndShowQRCode();
+                    // For Wasender, we need to connect first, then get QR
+                    console.log(`Refreshing QR code via Wasender API - ${isManualRefresh ? 'Manual' : 'Auto'} refresh`);
+
+                    // Try to reconnect the session to get fresh QR
+                    const reconnectResponse = await fetch('/api/wasender/reconnect', { method: 'POST' });
+                    const reconnectData = await reconnectResponse.json();
+
+                    if (reconnectData.success) {
+                        // Wait a moment for session to initialize
+                        await new Promise(resolve => setTimeout(resolve, 2000));
+
+                        // Now get the QR code
+                        await fetchAndShowQRCode();
+                    } else {
+                        throw new Error(reconnectData.error || 'Failed to reconnect session');
+                    }
                 } else {
                     // Use legacy refresh endpoint
                     await fetch('/api/whatsapp/refresh-qr', { method: 'POST' });
-                    
+
                     // Wait a moment for new QR to generate
                     setTimeout(() => {
                         checkStatus();
                     }, 2000);
                 }
 
-                refreshBtn.textContent = originalText;
-                refreshBtn.disabled = false;
+                if (refreshBtn) {
+                    refreshBtn.textContent = '🔄 Refresh QR Code';
+                    refreshBtn.disabled = false;
+                }
 
             } catch (error) {
                 console.error('Error refreshing QR:', error);
-                showError('Failed to refresh QR code');
+                showError('Failed to refresh QR code: ' + error.message);
+                isGeneratingQR = false; // Reset flag on error
 
                 // Reset button
                 const refreshBtn = document.querySelector('.refresh-btn');
-                refreshBtn.textContent = '🔄 Refresh QR Code';
-                refreshBtn.disabled = false;
+                if (refreshBtn) {
+                    refreshBtn.textContent = '🔄 Refresh QR Code';
+                    refreshBtn.disabled = false;
+                }
             }
         }
 
 
+
+        // Start auto-refresh for QR code every 45 seconds
+        function startAutoRefresh() {
+            // Clear existing auto-refresh
+            if (autoRefreshInterval) {
+                clearInterval(autoRefreshInterval);
+            }
+
+            // Only auto-refresh if we haven't reached max attempts
+            if (qrAttemptCount < maxQRAttempts) {
+                autoRefreshInterval = setInterval(async () => {
+                    console.log(`Auto-refreshing QR code after 45 seconds (will be attempt ${qrAttemptCount + 1}/${maxQRAttempts})`);
+
+                    // Don't auto-refresh if we've already reached max attempts
+                    if (qrAttemptCount >= maxQRAttempts) {
+                        console.log('Max attempts reached, stopping auto-refresh');
+                        clearInterval(autoRefreshInterval);
+                        return;
+                    }
+
+                    await refreshQR();
+                }, QR_EXPIRY_TIME);
+            }
+        }
+
+        // FIXED: Start auto-refresh based on remaining time, not fixed 45s
+        function startAutoRefreshWithRemainingTime(remainingTime) {
+            // Clear existing auto-refresh
+            if (autoRefreshInterval) {
+                clearInterval(autoRefreshInterval);
+            }
+
+            // Only auto-refresh if we haven't reached max attempts
+            if (qrAttemptCount < maxQRAttempts) {
+                console.log(`Scheduling auto-refresh in ${remainingTime}ms (${remainingTime / 1000}s)`);
+
+                autoRefreshInterval = setTimeout(async () => {
+                    console.log(`Auto-refreshing QR code after ${remainingTime / 1000}s (will be attempt ${qrAttemptCount + 1}/${maxQRAttempts})`);
+
+                    // Don't auto-refresh if we've already reached max attempts
+                    if (qrAttemptCount >= maxQRAttempts) {
+                        console.log('Max attempts reached, stopping auto-refresh');
+                        return;
+                    }
+
+                    await refreshQR();
+                }, remainingTime);
+            }
+        }
+
+        // Update QR attempt display
+        function updateQRAttemptDisplay() {
+            const qrInfo = document.querySelector('.qr-info');
+            if (qrInfo) {
+                qrInfo.innerHTML = `
+                    <span>⏱️ QR Code ${qrAttemptCount}/${maxQRAttempts} - Auto-generates every 45 seconds</span>
+                `;
+            }
+        }
+
+        // Show QR attempts exhausted state
+        function showQRAttemptsExhausted() {
+            hideAllContainers();
+            document.getElementById('error-container').style.display = 'block';
+            document.getElementById('error-message').innerHTML = `
+                <strong>⏰ QR Code Attempts Exhausted</strong><br>
+                You've used all ${maxQRAttempts} QR code attempts (${maxQRAttempts * 45} seconds total).<br>
+                <small>Click "Refresh QR Code" to get 3 new attempts.</small>
+            `;
+
+            // Change the button text and function for QR refresh
+            const retryBtn = document.querySelector('#error-container .refresh-btn');
+            if (retryBtn) {
+                retryBtn.textContent = '🔄 Refresh QR Code';
+                retryBtn.onclick = refreshQR; // Use refreshQR instead of checkStatus
+            }
+
+            // Update connection status
+            updateConnectionStatus('connecting', 'QR attempts exhausted - Click refresh for new attempts');
+
+            // Clear all intervals
+            clearAllIntervals();
+        }
 
         // Clear all intervals
         function clearAllIntervals() {
@@ -680,11 +996,112 @@
                 clearInterval(qrTimerInterval);
                 qrTimerInterval = null;
             }
+            if (autoRefreshInterval) {
+                clearInterval(autoRefreshInterval);
+                autoRefreshInterval = null;
+            }
         }
+
+        // Enhanced status checking with retry logic
+        async function performInitialStatusCheck() {
+            console.log('Performing initial status check...');
+
+            // Reset QR generation flag at start
+            isGeneratingQR = false;
+            
+            // Only reset QR attempt count if this is a fresh page load (not a refresh)
+            if (!sessionStorage.getItem('qrAttemptCount')) {
+                qrAttemptCount = 0;
+            } else {
+                qrAttemptCount = parseInt(sessionStorage.getItem('qrAttemptCount')) || 0;
+                console.log('Restored QR attempt count:', qrAttemptCount);
+            }
+
+            // Update status details
+            const statusDetails = document.getElementById('status-details');
+            const attemptCounter = document.getElementById('attempt-counter');
+
+            // Check status 3 times with delays to handle initialization
+            for (let attempt = 1; attempt <= 3; attempt++) {
+                console.log(`Status check attempt ${attempt}/3`);
+
+                if (statusDetails) {
+                    statusDetails.innerHTML = `
+                        <div>🔍 Checking session status...</div>
+                        <div>📡 Connecting to Wasender API...</div>
+                    `;
+                }
+
+                if (attemptCounter) {
+                    attemptCounter.textContent = `Attempt ${attempt} of 3`;
+                }
+
+                try {
+                    await checkStatus();
+
+                    // If we get a definitive status (connected or need_scan), break
+                    const currentStatus = document.getElementById('connection-text').textContent;
+                    if (currentStatus.includes('Connected') || currentStatus.includes('QR') || currentStatus.includes('Waiting for QR scan') || currentStatus.includes('Scan QR Code')) {
+                        console.log('Got definitive status, stopping retry attempts');
+                        break;
+                    }
+
+                } catch (error) {
+                    console.error(`Status check attempt ${attempt} failed:`, error);
+
+                    if (statusDetails) {
+                        statusDetails.innerHTML = `
+                            <div>❌ Attempt ${attempt} failed</div>
+                            <div style="color: #dc3545; font-size: 12px;">${error.message}</div>
+                        `;
+                    }
+                }
+
+                // Wait before next attempt (except for last attempt)
+                if (attempt < 3) {
+                    console.log(`Waiting 3 seconds before attempt ${attempt + 1}...`);
+
+                    if (statusDetails) {
+                        statusDetails.innerHTML = `
+                            <div>⏳ Waiting 3 seconds...</div>
+                            <div>🔄 Preparing next attempt...</div>
+                        `;
+                    }
+
+                    await new Promise(resolve => setTimeout(resolve, 3000));
+                }
+            }
+        }
+
+        // Debug function to check current state
+        function debugCurrentState() {
+            console.log('=== DEBUG STATE ===');
+            console.log('isGeneratingQR:', isGeneratingQR);
+            console.log('qrAttemptCount:', qrAttemptCount);
+            console.log('maxQRAttempts:', maxQRAttempts);
+            console.log('isAuthenticated:', isAuthenticated);
+            console.log('qrGeneratedTime:', qrGeneratedTime);
+            console.log('==================');
+        }
+
+        // Make debug function available globally
+        window.debugQR = debugCurrentState;
 
         // Start checking status when page loads
         document.addEventListener('DOMContentLoaded', function () {
-            checkStatus();
+            console.log('Page loaded, starting initial status check...');
+            
+            // Clear authentication flag on fresh page load (not refresh)
+            if (performance.navigation.type === 1) {
+                // This is a refresh, keep the flag
+                console.log('Page refreshed, keeping authentication state');
+            } else {
+                // This is a new navigation, clear the flag
+                sessionStorage.removeItem('wasAuthenticated');
+                console.log('New page load, cleared authentication state');
+            }
+            
+            performInitialStatusCheck();
         });
 
         // Clean up intervals when page unloads
@@ -704,7 +1121,7 @@
                     reconnectBtn.style.background = '#17a2b8';
                     reconnectBtn.textContent = '🔗 Reconnect Session';
                     reconnectBtn.onclick = forceReconnect;
-                    
+
                     const retryBtn = errorContainer.querySelector('.refresh-btn');
                     if (retryBtn) {
                         retryBtn.parentNode.insertBefore(reconnectBtn, retryBtn.nextSibling);
@@ -742,7 +1159,7 @@
             } catch (error) {
                 console.error('Error reconnecting:', error);
                 showError('Failed to reconnect: ' + error.message);
-                
+
                 const btn = event.target;
                 btn.textContent = '🔗 Reconnect Session';
                 btn.disabled = false;

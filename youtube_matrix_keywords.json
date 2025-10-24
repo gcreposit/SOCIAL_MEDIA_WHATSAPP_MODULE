@@ -1,0 +1,146 @@
+[
+  {
+    "id": 31,
+    "hindiKeyword": "हत्या, खून, कत्ल, जान से मारना, मार डाला",
+    "englishKeyword": "murder, killing, homicide, to kill, killed",
+    "hinglishKeyword": "hatya, khoon, katl, jaan se marna, maar dala",
+    "broadCategoryName": "CRIME",
+    "subCategoryName": "MURDER"
+  },
+  {
+    "id": 32,
+    "hindiKeyword": "छेड़छाड़, छेड़खानी, लज्जाभंग, शीलभंग, निर्वस्त्र करना, कपड़े फाड़ना, कपड़े खींचना, बुरी नजर से देखना, बुरी नीयत से घूरना, बुरी नीयत से पकड़ना, महिला उत्पीड़न, महिला से छेड़छाड़, स्त्री उत्पीड़न, अशोभनीय हरकत, अभद्र व्यवहार,बलात्कार, दुष्कर्म, गलत कृत्य, रेप, कुक",
+    "englishKeyword": "rape, sexual assault, wrongful act, rape, misconduct, dirty act, misdeed, wrongful deed, molestation, immoral act, misconduct, wrong act,molestation, eve-teasing, outraging modesty, indecency, stripping, tearing clothes, pulling clothes, staring with bad,",
+    "hinglishKeyword": "balatkaar, dushkarm, galat kriya, rape, kukarm, ganda kaam, kukritiya, dushkritiya, durachar, anaitik kaam, kukarm, galat kaam,chhedchhad, chhedkhani, lajja-bhang, sheel-bhang, nirvastra karna, kapde phaadna, kapde kheenchna, buri nazar se dekhna, buri ni",
+    "broadCategoryName": "CRIME",
+    "subCategoryName": "AGAINT WOMEN"
+  },
+  {
+    "id": 35,
+    "hindiKeyword": "पुलिस में भ्रष्टाचार, घूस, रिश्वत, वसूली, उत्कोच लेना, पुलिस द्वारा रुपया मांगना",
+    "englishKeyword": "corruption in police, police demanding money",
+    "hinglishKeyword": "police mein bhrashtachar, police dwara rupya maangna",
+    "broadCategoryName": "POLICE MISCONDUCT",
+    "subCategoryName": "CORRUPTION"
+  },
+  {
+    "id": 36,
+    "hindiKeyword": "पुलिस द्वारा मारपीट, पुलिस प्रताड़ना, पुलिस गाली गलौज, पुलिस हिंसा, पुलिस ज्यादती, पुलिस अत्याचार, पुलिस की मारकूट, पुलिस शोषण",
+    "englishKeyword": "police beating, police harassment, police abuse, police violence, police brutality, police excess, police torture, police exploitation",
+    "hinglishKeyword": "police dwara maarpeet, police pratadna, police gaali galoz, police hinsa, police jyadati, police atyachar, police ki markoot, police shoshan",
+    "broadCategoryName": "POLICE MISCONDUCT",
+    "subCategoryName": "MISCONDUCT"
+  },
+  {
+    "id": 38,
+    "hindiKeyword": "चोरी, सेंधमारी, गृहभेदन, ताला तोड़कर चोरी, सेंध लगाना, नकब लगाना, नकब, चोरी की वारदात, घर में सेंधमारी, रात में चोरी, जेब कटाई, पॉकेटमारी",
+    "englishKeyword": "theft, burglary, housebreaking, lock-breaking theft, breaking in, break-in, stealing, robbery at house, night theft, pickpocketing, pocket theft",
+    "hinglishKeyword": "chori, sendhmari, grihbhedan, tala todkar chori, sendh lagana, nakab lagana, nakab, chori ki wardat, ghar mein sendhmari, raat mein chori, jeb katai, pocketmari",
+    "broadCategoryName": "CRIME",
+    "subCategoryName": "THEFT"
+  },
+  {
+    "id": 39,
+    "hindiKeyword": "हमला, मारपीट, मारा पीटा, पिटाई, आक्रमण, धक्का मुक्की, हाथापाई, झगड़ा, मारकूट, झगड़ालू हरकत",
+    "englishKeyword": "assault, beating, physical fight, thrashing, attack, scuffle, manhandling, brawl, violence, quarrel",
+    "hinglishKeyword": "hamla, maarpeet, maara peeta, pitai, aakraman, dhakka mukki, haathapai, jhagd_a, markoot, jhagdalu harkat",
+    "broadCategoryName": "CRIME",
+    "subCategoryName": "ASSAULT"
+  },
+  {
+    "id": 41,
+    "hindiKeyword": "बूथ सं0, मतदान केंद्र पर अव्यवस्था, बूथ पर लंबी लाइन, बूथ पर सुरक्षा की कमी, मतदान केंद्र बंद होना, बूथ पर प्रकाश व्यवस्था की कमी",
+    "englishKeyword": "polling booth, mismanagement at polling station, long queue at booth, lack of security at booth, booth closure, lack of lighting at polling station",
+    "hinglishKeyword": "booth sankhya, matdaan kendra par avyavastha, booth par lambi line, booth par suraksha ki kami, matdaan kendra band hona, booth par prakash vyavastha ki kami",
+    "broadCategoryName": "ELECTION",
+    "subCategoryName": "BOOTH FACILITIES RELATED ISSUE"
+  },
+  {
+    "id": 42,
+    "hindiKeyword": "वोटिंग मशीन, वीवीपैट, VVPAT खराब, ईवीएम में गड़बड़ी, मशीन बंद होना, ईवीएम बदलना, मशीन में छेड़छाड़",
+    "englishKeyword": "voting machine, VVPAT malfunction, EVM glitch, machine shutdown, EVM replacement, machine tampering",
+    "hinglishKeyword": "voting machine, VVPAT kharab, EVM mein gadbadi,EVM machine band hona, EVM badalna, EVM machine mein chhedchhad",
+    "broadCategoryName": "ELECTION",
+    "subCategoryName": "BOOTH MACHINE RELATED ISSUES"
+  },
+  {
+    "id": 43,
+    "hindiKeyword": "पोलिंग एजेन्ट की शिकायत, चुनाव अधिकारी की शिकायत, बूथ अधिकारी की लापरवाही, चुनाव कर्मचारी का पक्षपात, मतदाता पर दबाव डालना, वोटर को रोकना, चुनाव कर्मचारी भ्रष्टाचार",
+    "englishKeyword": "complaint against polling agent, complaint against election officer, negligence by booth official, bias by election staff, pressurizing voter, stopping voter, corruption by election staff",
+    "hinglishKeyword": "polling agent ki shikayat, chunav adhikari ki shikayat, booth adhikari ki laparwahi, chunav karmchari ka pakshpaat, matdata par dabav dalna, voter ko rokna, chunav karmchari bhrashtachar",
+    "broadCategoryName": "ELECTION",
+    "subCategoryName": "COMPLAIN AGAINST BOOTH OFFICIALS"
+  },
+  {
+    "id": 44,
+    "hindiKeyword": "मतदान में बाधा, बूथ कैप्चरिंग, फर्जी मतदान, नकली वोटिंग, जबरन वोटिंग कराना, चुनावी हिंसा, मतदाता को डराना, मतदान रोकना",
+    "englishKeyword": "obstruction in voting, booth capturing, bogus voting, fake voting, forced voting, election violence, voter intimidation, stopping voting",
+    "hinglishKeyword": "matdaan mein badha, booth capturing, farzi matdaan, nakli voting, jabran voting karana, chunavi hinsa, matdata ko darana, matdaan rokna",
+    "broadCategoryName": "ELECTION",
+    "subCategoryName": "HINDRANCE IN ELECTION SERVICES"
+  },
+  {
+    "id": 45,
+    "hindiKeyword": "आचार संहिता उल्लंघन, चुनावी रंजिश, नोट के बदले वोट, पैसा बांटना, साड़ी बांटना, शराब बांटना, जाली नोट बांटना, मादक पदार्थ चुनाव में बांटना",
+    "englishKeyword": "model code of conduct violation, election rivalry, cash for votes, distribution of money, distribution of sarees, liquor distribution, fake currency distribution, narcotics distribution in election",
+    "hinglishKeyword": "achar sanhita ullanghan, chunavi ranjish, note ke badle vote, paisa baantna, saadi baantna, sharab baantna, jaali note baantna, madak padarth chunav mein baantna",
+    "broadCategoryName": "ELECTION",
+    "subCategoryName": "ELECTORAL DISPUTES"
+  },
+  {
+    "id": 46,
+    "hindiKeyword": "ट्रैफिक जाम, जाम, यातायात बाधित, ट्रैफिक धीमा, सड़क जाम, भारी जाम, रोड ब्लॉक",
+    "englishKeyword": "traffic jam, congestion, traffic obstruction, slow traffic, road jam, heavy jam, road block",
+    "hinglishKeyword": "traffic jam, jam, yaatayat badhit, traffic dheema, sadak jam, bhaari jam, road block",
+    "broadCategoryName": "TRAFFIC RELATED",
+    "subCategoryName": "TRAFFIC JAM"
+  },
+  {
+    "id": 50,
+    "hindiKeyword": "फेक न्यूज, भ्रामक खबर, झूठी खबर, मनगढ़ंत खबर, गलत सूचना, अफवाह फैलाना",
+    "englishKeyword": "fake news, misleading news, false news, fabricated news, wrong information, spreading rumours",
+    "hinglishKeyword": "fake news, bhramak khabar, jhooti khabar, mangadhant khabar, galat soochna, afwah failana",
+    "broadCategoryName": "VIRAL & FACT CHECK",
+    "subCategoryName": "FAKE NEWS"
+  },
+  {
+    "id": 55,
+    "hindiKeyword": "देशविरोधी नारे, देशद्रोह, अलगाववाद, राष्ट्रविरोधी गतिविधि, हिंसक विरोध",
+    "englishKeyword": "anti-national slogans, sedition, separatism, anti-national activity, violent protest",
+    "hinglishKeyword": "desh virodhi nare, deshdroh, alagavvad, rashtravirodhi gatividhi, hinsak virodh",
+    "broadCategoryName": "LAW & ORDER",
+    "subCategoryName": "ANTI NATIONAL ACTIVITIES"
+  },
+  {
+    "id": 56,
+    "hindiKeyword": "आतंकवादी गतिविधि, आतंकी हमला, आतंक फैलाना, बम धमकी, बम विस्फोट",
+    "englishKeyword": "terrorist activity, terror attack, spreading terror, bomb threat, bomb blast",
+    "hinglishKeyword": "aatankwadi gatividhi, aatanki hamla, aatank phailana, bomb dhamki, bomb visfot",
+    "broadCategoryName": "LAW & ORDER",
+    "subCategoryName": "TERRORIST RELATED"
+  },
+  {
+    "id": 57,
+    "hindiKeyword": "आपदा, आपदा प्रबंधन में विफलता, बचाव कार्य बाधित, बाढ़ प्रदर्शन, राहत कार्य रोका गया",
+    "englishKeyword": "disaster, failure in disaster management, obstruction in rescue, protest during flood, relief work blocked",
+    "hinglishKeyword": "aapda, aapda prabandhan mein viphata, bachav karya badhit, baadh pradarshan, rahat karya roka gaya",
+    "broadCategoryName": "LAW & ORDER",
+    "subCategoryName": "DISASTER RELATED"
+  },
+  {
+    "id": 58,
+    "hindiKeyword": "साम्प्रदायिक, हिन्दू मुस्लिम, अलग अलग समुदाय, दो सम्प्रदाय में तनाव, दो संप्रदाय में मारपीट, साम्प्रदायिक विवाद, हिन्दू मुस्लिम विवाद, सांप्रदायिक हिंसा, धार्मिक तनाव, धार्मिक विवाद, मजहबी झगड़ा, सांप्रदायिक दंगा",
+    "englishKeyword": "communal, Hindu-Muslim, different communities, tension between two communities, fight between two communities, communal dispute, Hindu-Muslim dispute, communal violence, religious tension, religious dispute, sectarian clash, communal riot",
+    "hinglishKeyword": "sampradayik, hindu muslim, alag alag samudaay, do sampraday mein tanav, do sampraday mein maarpeet, sampradayik vivaad, hindu muslim vivaad, sampradayik hinsa, dharmik tanav, dharmik vivaad, majhabi jhagda, sampradayik danga",
+    "broadCategoryName": "CRIME",
+    "subCategoryName": "COMMUNAL"
+  },
+  {
+    "id": 59,
+    "hindiKeyword": "दो पक्षों में विवाद, जातिगत विवाद, जातिगत संघर्ष, जातिगत हिंसा, दलित, अनुसूचित जाति, जातिसूचक टिप्पणी, जातिसूचक गाली, दलित प्रताड़ना, दलित के साथ अन्याय, दलित हत्या, दलित मारपीट, दलित उत्पीड़न, अनुसूचित जाति उत्पीड़न",
+    "englishKeyword": "dispute between two groups, caste dispute, caste conflict, caste violence, Dalit, Scheduled Caste, casteist remark, casteist abuse, Dalit harassment, injustice against Dalit, Dalit murder, Dalit beating, Dalit atrocity, Scheduled Caste atrocity",
+    "hinglishKeyword": "do pakshon mein vivaad, jatiyaat vivaad, jatiyaat sangharsh, jatiyaat hinsa, Dalit, anusoochit jati, jatisoochak tippani, jatisoochak gaali, Dalit pratadna, Dalit ke saath anyay, Dalit hatya, Dalit maarpeet, Dalit utpidan, anusoochit jati utpidan",
+    "broadCategoryName": "CRIME",
+    "subCategoryName": "CASTEISM"
+  }
+]

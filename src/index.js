@@ -9,6 +9,7 @@ const DatabaseService = require('./services/databaseService');
 const MessageProcessor = require('./services/messageProcessor');
 const AttachmentService = require('./services/attachmentService');
 const DocumentViewerService = require('./services/documentViewerService');
+const KeywordUpdateService = require('./services/keywordUpdateService');
 const Server = require('./server');
 
 // Wasender API services
@@ -23,6 +24,7 @@ class WhatsAppGroupCapture {
     this.attachmentService = new AttachmentService();
     this.messageProcessor = new MessageProcessor();
     this.documentViewerService = new DocumentViewerService(this.attachmentService);
+    this.keywordUpdateService = new KeywordUpdateService();
 
     // Initialize Wasender API services
     if (process.env.WASENDER_API_KEY && process.env.WASENDER_PERSONAL_ACCESS_TOKEN) {
@@ -57,6 +59,11 @@ class WhatsAppGroupCapture {
       console.log('Connecting to database...');
       await this.dbService.connect();
       console.log('Database connected successfully');
+
+      // Start keyword update service
+      console.log('Starting keyword update service...');
+      await this.keywordUpdateService.start();
+      console.log('✅ Keyword update service started - will check for updates every 6 hours');
 
       // Wasender API client is already initialized in constructor
       console.log('✅ Wasender API client ready');
@@ -322,6 +329,16 @@ class WhatsAppGroupCapture {
         }
       }
 
+      // Stop keyword update service
+      if (this.keywordUpdateService) {
+        try {
+          this.keywordUpdateService.stop();
+          console.log('✅ Keyword update service stopped');
+        } catch (keywordError) {
+          console.error('❌ Error stopping keyword update service:', keywordError);
+        }
+      }
+
       // Disconnect from database
       if (this.dbService) {
         try {
@@ -366,6 +383,7 @@ async function main() {
   global.app.documentViewerService = app.documentViewerService;
   global.app.sessionManager = app.sessionManager; // For Wasender API access
   global.app.webhookHandler = app.webhookHandler; // For webhook access
+  global.app.keywordUpdateService = app.keywordUpdateService; // For keyword update API access
 
   await app.start(!backendOnly); // Pass false to disable web server in backend-only mode
 

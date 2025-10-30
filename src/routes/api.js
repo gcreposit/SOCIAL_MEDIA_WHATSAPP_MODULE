@@ -701,6 +701,140 @@ module.exports = function (dbService, documentViewerService = null) {
 
 
   /**
+   * Get keyword update service status
+   * GET /api/keywords/status
+   */
+  router.get('/keywords/status', async (req, res) => {
+    try {
+      const keywordService = global.app?.keywordUpdateService;
+      if (!keywordService) {
+        return res.status(503).json({
+          success: false,
+          error: 'Keyword update service not available'
+        });
+      }
+
+      const stats = keywordService.getStats();
+      const health = keywordService.healthCheck();
+
+      res.json({
+        success: true,
+        status: health.status,
+        isRunning: stats.isRunning,
+        stats: {
+          totalFetches: stats.totalFetches,
+          successfulFetches: stats.successfulFetches,
+          failedFetches: stats.failedFetches,
+          updatesApplied: stats.updatesApplied,
+          noChangeSkips: stats.noChangeSkips,
+          lastSuccessTime: stats.lastSuccessTime,
+          lastUpdateTime: stats.lastUpdateTime,
+          nextUpdateIn: stats.nextUpdateIn
+        },
+        configuration: {
+          apiUrl: stats.apiUrl,
+          updateInterval: `${stats.updateInterval / 1000 / 60 / 60} hours`,
+          currentDataHash: stats.currentDataHash
+        },
+        health: {
+          status: health.status,
+          lastSuccessAge: health.lastSuccessAge,
+          issues: health.issues
+        },
+        timestamp: new Date().toISOString()
+      });
+    } catch (error) {
+      console.error('Error getting keyword service status:', error);
+      res.status(500).json({
+        success: false,
+        error: 'Failed to get keyword service status',
+        message: error.message
+      });
+    }
+  });
+
+  /**
+   * Force keyword update
+   * POST /api/keywords/update
+   */
+  router.post('/keywords/update', async (req, res) => {
+    try {
+      const keywordService = global.app?.keywordUpdateService;
+      if (!keywordService) {
+        return res.status(503).json({
+          success: false,
+          error: 'Keyword update service not available'
+        });
+      }
+
+      console.log('API: Manual keyword update requested');
+      const result = await keywordService.forceUpdate();
+
+      res.json({
+        success: true,
+        updated: result.updated,
+        message: result.updated ? 'Keywords updated successfully' : 'No changes detected',
+        result: {
+          recordCount: result.recordCount,
+          newHash: result.newHash?.substring(0, 8),
+          processingTime: result.processingTime,
+          reason: result.reason
+        },
+        timestamp: new Date().toISOString()
+      });
+    } catch (error) {
+      console.error('Error forcing keyword update:', error);
+      res.status(500).json({
+        success: false,
+        error: 'Failed to update keywords',
+        message: error.message
+      });
+    }
+  });
+
+  /**
+   * Get current keyword configuration
+   * GET /api/keywords/config
+   */
+  router.get('/keywords/config', async (req, res) => {
+    try {
+      const MessageFilterService = require('../services/messageFilterService');
+      const filterService = new MessageFilterService();
+      
+      const sampleData = filterService.getSampleData();
+      const metrics = filterService.getMetrics();
+
+      res.json({
+        success: true,
+        configuration: sampleData.totalCounts,
+        samples: {
+          englishDistricts: sampleData.englishDistricts,
+          hindiDistricts: sampleData.hindiDistricts,
+          hindiKeywords: sampleData.hindiKeywords,
+          englishKeywords: sampleData.englishKeywords,
+          hinglishKeywords: sampleData.hinglishKeywords
+        },
+        filterMetrics: {
+          totalProcessed: metrics.totalProcessed,
+          passedFilter: metrics.passedFilter,
+          failedFilter: metrics.failedFilter,
+          passRate: metrics.passRate,
+          avgProcessingTime: metrics.avgProcessingTimeMs,
+          dataReloads: metrics.dataReloads
+        },
+        timestamp: new Date().toISOString()
+      });
+    } catch (error) {
+      console.error('Error getting keyword configuration:', error);
+      res.status(500).json({
+        success: false,
+        error: 'Failed to get keyword configuration',
+        message: error.message
+      });
+    }
+  });
+
+  /**
    * Get document statistics
    * GET /api/documents/stats
    */

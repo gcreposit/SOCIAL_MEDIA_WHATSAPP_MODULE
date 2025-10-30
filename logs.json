@@ -1,5 +1,257 @@
-now I want ypu to adress one issue that when I run th code 
+(base) apple1@Sameercr7 SOCIAL_MEDIA_WHATSAPP_MODULE % npm start
 
-1-See there two ways to connect to sessions one is in wasenderapi 
+> whatsapp_integration@1.0.0 start
+> node src/index.js
 
-2-Now I want when create the session but notill ow we havend scanned the QR code  okay 
+[dotenv@17.2.1] injecting env (27) from .env -- tip: 🔐 encrypt with Dotenvx: https://dotenvx.com
+info: District data loaded successfully {"englishDistricts":75,"hindiDistricts":75,"service":"wasender-migration","timestamp":"2025-10-24 23:10:57"}
+info: Keyword data loaded successfully {"englishKeywords":145,"hindiKeywords":151,"hinglishKeywords":147,"service":"wasender-migration","timestamp":"2025-10-24 23:10:57"}
+info: MessageFilterService initialized {"englishDistricts":75,"hindiDistricts":75,"service":"wasender-migration","timestamp":"2025-10-24 23:10:57","totalKeywords":443}
+Attachment directories initialized successfully
+Attachment directories initialized successfully
+Wasender API credentials detected - initializing Wasender services
+info: District data loaded successfully {"englishDistricts":75,"hindiDistricts":75,"service":"wasender-migration","timestamp":"2025-10-24 23:10:57"}
+info: Keyword data loaded successfully {"englishKeywords":145,"hindiKeywords":151,"hinglishKeywords":147,"service":"wasender-migration","timestamp":"2025-10-24 23:10:57"}
+info: MessageFilterService initialized {"englishDistricts":75,"hindiDistricts":75,"service":"wasender-migration","timestamp":"2025-10-24 23:10:57","totalKeywords":443}
+info: GroupMessageMonitor initialized {"cacheEnabled":true,"databaseIntegration":true,"duplicateDetection":true,"service":"wasender-migration","timestamp":"2025-10-24 23:10:57","wasenderClientAvailable":true,"wasenderClientStatus":"ready"}
+info: District data loaded successfully {"englishDistricts":75,"hindiDistricts":75,"service":"wasender-migration","timestamp":"2025-10-24 23:10:57"}
+info: Keyword data loaded successfully {"englishKeywords":145,"hindiKeywords":151,"hinglishKeywords":147,"service":"wasender-migration","timestamp":"2025-10-24 23:10:57"}
+info: MessageFilterService initialized {"englishDistricts":75,"hindiDistricts":75,"service":"wasender-migration","timestamp":"2025-10-24 23:10:57","totalKeywords":443}
+info: GroupMessageMonitor initialized {"cacheEnabled":true,"databaseIntegration":true,"duplicateDetection":true,"service":"wasender-migration","timestamp":"2025-10-24 23:10:57","wasenderClientAvailable":true,"wasenderClientStatus":"ready"}
+Starting WhatsApp Group Message Capture with Wasender API...
+Connecting to database...
+info: Media directories initialized {"baseDirectory":"/Users/apple1/Downloads/WHATSAPP_DOCS/","service":"wasender-migration","timestamp":"2025-10-24 23:10:57"}
+✅ Database connection test successful
+✅ Database models synchronized
+Starting PostBank auto-migration...
+Existing columns in post_bank: [
+  'id',                   'analysisStatus',      'attachments',
+  'author_name',          'author_username',     'bookmarks',
+  'category_id',          'channel_id',          'comments',
+  'core_source',          'duration',            'keyword',
+  'likes',                'mention_hashtags',    'mention_ids',
+  'photo_attachment',     'post_date',           'post_id',
+  'post_language',        'post_location',       'post_snippet',
+  'post_time',            'post_timestamp',      'post_title',
+  'post_type',            'post_url',            'retweets',
+  'source',               'unique_hash',         'video_attachment',
+  'video_id',             'views',               'quoted_or_reply_link',
+  'rule_id',              'tweet_type',          'create_by',
+  'tag',                  'author_user_id',      'searched_term',
+  'replies_since_id',     'query_tag',           'mobile_number',
+  'group_id',             'reply_to_message_id', 'reply_text',
+  'created_at',           'updated_at',          'analysis_status',
+  'rule_tag',             'in_reply_to_id',      'in_reply_to_user_id',
+  'in_reply_to_username', 'is_reply',            'display_text_range',
+  'device_source',        'extended_entities',   'possibly_sensitive',
+  'pinned_tweet_ids',     'is_limited_reply',    'article'
+]
+Column mobile_number already exists, skipping...
+Column group_id already exists, skipping...
+Column reply_to_message_id already exists, skipping...
+Column reply_text already exists, skipping...
+Column created_at already exists, skipping...
+Column updated_at already exists, skipping...
+Column author_user_id already exists, skipping...
+Column searched_term already exists, skipping...
+Column query_tag already exists, skipping...
+Column replies_since_id already exists, skipping...
+Column rule_tag already exists, skipping...
+Column in_reply_to_id already exists, skipping...
+Column in_reply_to_user_id already exists, skipping...
+Column in_reply_to_username already exists, skipping...
+Column is_reply already exists, skipping...
+Column display_text_range already exists, skipping...
+Column device_source already exists, skipping...
+Column extended_entities already exists, skipping...
+Column possibly_sensitive already exists, skipping...
+Column pinned_tweet_ids already exists, skipping...
+Column is_limited_reply already exists, skipping...
+Column article already exists, skipping...
+PostBank auto-migration completed. 0 columns added.
+✅ PostBank auto-migration completed
+Starting CommonAttachment auto-migration...
+Existing columns in common_attachments: [
+  'id',
+  'post_bank_id',
+  'attachment_type',
+  'platform_name',
+  'image_attachment_path',
+  'document_attachment_path',
+  'video_attachment_path',
+  'audio_attachment_path',
+  'link_metadata',
+  'reply_attachment_type',
+  'reply_attachment_path',
+  'mime_type',
+  'timestamp',
+  'group_id',
+  'mobile_number',
+  'download_status',
+  'processing_status',
+  'error_message',
+  'created_at',
+  'updated_at'
+]
+platform_name column exists without default; nothing to change.
+CommonAttachment auto-migration completed.
+✅ CommonAttachment auto-migration completed
+Starting PostUser auto-migration...
+Existing columns in post_users: [
+  'id',                     'platform',
+  'platform_user_id',       'username',
+  'display_name',           'bio_description',
+  'profile_image_url',      'banner_image_url',
+  'website_url',            'location',
+  'followers_count',        'following_count',
+  'posts_count',            'total_engagement',
+  'is_verified',            'is_private',
+  'is_business',            'account_status',
+  'platform_specific_data', 'profile_created_at',
+  'last_post_at',           'created_at',
+  'updated_at',             'is_blue_verified',
+  'verified_type',          'favourites_count',
+  'media_count',            'statuses_count',
+  'fast_followers_count',   'has_custom_timelines',
+  'is_translator',          'can_dm',
+  'can_media_tag',          'possibly_sensitive',
+  'pinned_tweet_ids',       'withheld_in_countries',
+  'is_automated',           'automated_by',
+  'mobile_number'
+]
+mobile_number column already exists, skipping...
+PostUser auto-migration completed.
+✅ PostUser auto-migration completed
+info: Starting media queue processing {"service":"wasender-migration","timestamp":"2025-10-24 23:10:57"}
+info: MediaQueueService initialized {"jobTimeout":300000,"maxConcurrentJobs":10,"maxRetries":3,"service":"wasender-migration","timestamp":"2025-10-24 23:10:57"}
+✅ Media queue service initialized
+Database connected successfully
+✅ Wasender API client ready
+✅ Using manual ngrok tunneling or http://matrixsession.gccloud.in/
+Starting web server...
+Server running on port 3000
+Web interface available at http://localhost:3000
+Web server started successfully
+✅ Using existing Wasender session from dashboard
+✅ Webhook handler ready
+WhatsApp Group Message Capture is now running with Wasender API!
+The system will capture and store all group messages via webhooks.
+Webhook endpoint: /webhook/wasender
+
+=== Testing Session Connectivity ===
+Session Status: no_session
+⚠️ Session status: no_session
+🌐 Webhook URL: null/webhook/wasender
+info: Processing webhook event {"dataSize":246,"event":"qrcode.updated","metadata":{"ip":"2a02:4780:2d:dbe8::1","processingTime":6,"timestamp":"2025-10-24T17:44:54.858Z","userAgent":"axios/1.8.4"},"processingId":"req_1761327894858_ugwst5x1d","service":"wasender-migration","timestamp":"2025-10-24 23:14:54"}
+info: QR code updated {"metadata":{"ip":"2a02:4780:2d:dbe8::1","processingTime":6,"timestamp":"2025-10-24T17:44:54.858Z","userAgent":"axios/1.8.4"},"qrCodeLength":0,"service":"wasender-migration","timestamp":"2025-10-24 23:14:54"}
+info: Handling session event {"eventType":"qrcode.updated","service":"wasender-migration","sessionId":null,"timestamp":"2025-10-24 23:14:54"}
+info: Processing webhook event {"dataSize":48,"event":"session.status","metadata":{"ip":"2a02:4780:2d:dbe8::1","processingTime":0,"timestamp":"2025-10-24T17:44:54.863Z","userAgent":"axios/1.8.4"},"processingId":"req_1761327894863_fhgsxfb7v","service":"wasender-migration","timestamp":"2025-10-24 23:14:54"}
+info: Session status update {"metadata":{"ip":"2a02:4780:2d:dbe8::1","processingTime":0,"timestamp":"2025-10-24T17:44:54.863Z","userAgent":"axios/1.8.4"},"service":"wasender-migration","status":"need_scan","timestamp":"2025-10-24 23:14:54"}
+info: Handling session event {"eventType":"session.status","service":"wasender-migration","sessionId":null,"timestamp":"2025-10-24 23:14:54"}
+info: Processing webhook event {"dataSize":49,"event":"session.status","metadata":{"ip":"2a02:4780:2d:dbe8::1","processingTime":1,"timestamp":"2025-10-24T17:45:54.231Z","userAgent":"axios/1.8.4"},"processingId":"req_1761327954231_4a568n7mo","service":"wasender-migration","timestamp":"2025-10-24 23:15:54"}
+info: Session status update {"metadata":{"ip":"2a02:4780:2d:dbe8::1","processingTime":1,"timestamp":"2025-10-24T17:45:54.231Z","userAgent":"axios/1.8.4"},"service":"wasender-migration","status":"connecting","timestamp":"2025-10-24 23:15:54"}
+info: Handling session event {"eventType":"session.status","service":"wasender-migration","sessionId":null,"timestamp":"2025-10-24 23:15:54"}
+info: Processing webhook event {"dataSize":48,"event":"session.status","metadata":{"ip":"2a02:4780:2d:dbe8::1","processingTime":1,"timestamp":"2025-10-24T17:45:55.709Z","userAgent":"axios/1.8.4"},"processingId":"req_1761327955709_l0j77b3aj","service":"wasender-migration","timestamp":"2025-10-24 23:15:55"}
+info: Session status update {"metadata":{"ip":"2a02:4780:2d:dbe8::1","processingTime":1,"timestamp":"2025-10-24T17:45:55.709Z","userAgent":"axios/1.8.4"},"service":"wasender-migration","status":"connected","timestamp":"2025-10-24 23:15:55"}
+info: Handling session event {"eventType":"session.status","service":"wasender-migration","sessionId":null,"timestamp":"2025-10-24 23:15:55"}
+info: Processing webhook event {"dataSize":698,"event":"messages-group.received","metadata":{"ip":"2a02:4780:2d:dbe8::1","processingTime":1,"timestamp":"2025-10-24T17:49:16.834Z","userAgent":"axios/1.8.4"},"processingId":"req_1761328156834_7rkinfi8w","service":"wasender-migration","timestamp":"2025-10-24 23:19:16"}
+info: Processing message batch {"messageCount":1,"metadata":{"ip":"2a02:4780:2d:dbe8::1","processingTime":1,"timestamp":"2025-10-24T17:49:16.834Z","userAgent":"axios/1.8.4"},"service":"wasender-migration","timestamp":"2025-10-24 23:19:16"}
+info: Processing individual message {"from":"120363407648087275@g.us","hasMedia":false,"messageId":"AC10711444C31340F9373FDEEFD70C3F","metadata":{"ip":"2a02:4780:2d:dbe8::1","processingTime":1,"timestamp":"2025-10-24T17:49:16.834Z","userAgent":"axios/1.8.4"},"participant":"17222953082901@lid","service":"wasender-migration","timestamp":"2025-10-24 23:19:16","type":"conversation"}
+info: Attempting to fetch group name from Wasender API {"groupId":"120363407648087275@g...","service":"wasender-migration","timestamp":"2025-10-24 23:19:16"}
+info: Fetching group metadata from Wasender API {"groupJid":"120363407648087275@g...","service":"wasender-migration","timestamp":"2025-10-24 23:19:16"}
+info: Wasender API Request {"data":null,"method":"get","service":"wasender-migration","timestamp":"2025-10-24 23:19:16","url":"/api/groups/120363407648087275@g.us/metadata"}
+info: Processing webhook event {"dataSize":698,"event":"messages.upsert","metadata":{"ip":"2a02:4780:2d:dbe8::1","processingTime":0,"timestamp":"2025-10-24T17:49:16.858Z","userAgent":"axios/1.8.4"},"processingId":"req_1761328156858_7eymqmic0","service":"wasender-migration","timestamp":"2025-10-24 23:19:16"}
+info: Processing message batch {"messageCount":1,"metadata":{"ip":"2a02:4780:2d:dbe8::1","processingTime":0,"timestamp":"2025-10-24T17:49:16.858Z","userAgent":"axios/1.8.4"},"service":"wasender-migration","timestamp":"2025-10-24 23:19:16"}
+info: Processing individual message {"from":"120363407648087275@g.us","hasMedia":false,"messageId":"AC10711444C31340F9373FDEEFD70C3F","metadata":{"ip":"2a02:4780:2d:dbe8::1","processingTime":0,"timestamp":"2025-10-24T17:49:16.858Z","userAgent":"axios/1.8.4"},"participant":"17222953082901@lid","service":"wasender-migration","timestamp":"2025-10-24 23:19:16","type":"conversation"}
+info: Processing webhook event {"dataSize":698,"event":"messages.received","metadata":{"ip":"2a02:4780:2d:dbe8::1","processingTime":0,"timestamp":"2025-10-24T17:49:16.860Z","userAgent":"axios/1.8.4"},"processingId":"req_1761328156860_j73wemhd6","service":"wasender-migration","timestamp":"2025-10-24 23:19:16"}
+info: Processing message batch {"messageCount":1,"metadata":{"ip":"2a02:4780:2d:dbe8::1","processingTime":0,"timestamp":"2025-10-24T17:49:16.860Z","userAgent":"axios/1.8.4"},"service":"wasender-migration","timestamp":"2025-10-24 23:19:16"}
+info: Processing individual message {"from":"120363407648087275@g.us","hasMedia":false,"messageId":"AC10711444C31340F9373FDEEFD70C3F","metadata":{"ip":"2a02:4780:2d:dbe8::1","processingTime":0,"timestamp":"2025-10-24T17:49:16.860Z","userAgent":"axios/1.8.4"},"participant":"17222953082901@lid","service":"wasender-migration","timestamp":"2025-10-24 23:19:16","type":"conversation"}
+info: Wasender API Response {"responseTime":"unknown","service":"wasender-migration","status":200,"timestamp":"2025-10-24 23:19:18","url":"/api/groups/120363407648087275@g.us/metadata"}
+info: Group name fetched successfully {"groupJid":"120363407648087275@g...","groupName":"Testing Group","participantCount":2,"service":"wasender-migration","timestamp":"2025-10-24 23:19:18"}
+info: Processing participants for mapping {"participantCount":2,"participants":[{"id":"17222953082901@lid","jid":"919451175537@s.whatsapp.net","lid":"17222953082901@lid"},{"id":"221856636362974@lid","jid":"917275147094@s.whatsapp.net","lid":"221856636362974@lid"}],"service":"wasender-migration","timestamp":"2025-10-24 23:19:18"}
+info: Participant mapping cached {"lid":"17222953082901@lid","realJid":"919451175537@s.whatsapp.net","service":"wasender-migration","timestamp":"2025-10-24 23:19:18"}
+info: Participant mapping cached {"lid":"221856636362974@lid","realJid":"917275147094@s.whatsapp.net","service":"wasender-migration","timestamp":"2025-10-24 23:19:18"}
+info: Final participant mapping created {"mappingKeys":["17222953082901@lid","221856636362974@lid"],"mappingSize":2,"service":"wasender-migration","timestamp":"2025-10-24 23:19:18"}
+info: Group metadata cached with participant mapping {"groupJid":"120363407648087275@g...","groupName":"Testing Group","participantCount":2,"service":"wasender-migration","timestamp":"2025-10-24 23:19:18"}
+info: Group name fetched successfully from API {"groupId":"120363407648087275@g...","groupName":"Testing Group","service":"wasender-migration","timestamp":"2025-10-24 23:19:18"}
+info: Processing @lid format (WhatsApp privacy ID) {"fullLength":14,"lidId":"1722295308...","service":"wasender-migration","timestamp":"2025-10-24 23:19:18"}
+info: LID resolved to real JID (from groupInfo) {"lidJid":"17222953082901@...","realJid":"919451175537@s....","service":"wasender-migration","timestamp":"2025-10-24 23:19:18"}
+info: LID resolved to real JID, formatting real phone number {"lidId":"1722295308...","realJid":"919451175537@s....","service":"wasender-migration","timestamp":"2025-10-24 23:19:18"}
+info: User info updated with new data {"displayName":"Indra Pal Verma","phoneNumber":"+91 94511 75537","service":"wasender-migration","timestamp":"2025-10-24 23:19:18","updatedFields":["new_user"],"userId":"17222953082901@lid"}
+info: Message filtered out - not saving to database {"hasDistrict":false,"hasKeyword":false,"messageId":"AC10711444C31340F9373FDEEFD70C3F","reason":"no_district_or_keyword","scenario":"message_only","service":"wasender-migration","timestamp":"2025-10-24 23:19:18"}
+info: Group message ready for database storage {"groupId":"120363407648087275@g.us","hasMedia":false,"messageId":"AC10711444C31340F9373FDEEFD70C3F","service":"wasender-migration","timestamp":"2025-10-24 23:19:18"}
+New client connected
+info: Processing webhook event {"dataSize":495,"event":"messages.upsert","metadata":{"ip":"2a02:4780:2d:dbe8::1","processingTime":0,"timestamp":"2025-10-24T17:50:40.889Z","userAgent":"axios/1.8.4"},"processingId":"req_1761328240889_vn5cq3q67","service":"wasender-migration","timestamp":"2025-10-24 23:20:40"}
+info: Processing message batch {"messageCount":1,"metadata":{"ip":"2a02:4780:2d:dbe8::1","processingTime":0,"timestamp":"2025-10-24T17:50:40.889Z","userAgent":"axios/1.8.4"},"service":"wasender-migration","timestamp":"2025-10-24 23:20:40"}
+info: Processing individual message {"from":"120363407648087275@g.us","hasMedia":false,"messageId":"ACE4A16C84743611D15E1A04D7FEADA5","metadata":{"ip":"2a02:4780:2d:dbe8::1","processingTime":0,"timestamp":"2025-10-24T17:50:40.889Z","userAgent":"axios/1.8.4"},"participant":"17222953082901@lid","service":"wasender-migration","timestamp":"2025-10-24 23:20:40","type":"conversation"}
+info: Processing @lid format (WhatsApp privacy ID) {"fullLength":14,"lidId":"1722295308...","service":"wasender-migration","timestamp":"2025-10-24 23:20:40"}
+info: LID resolved to real JID (from groupInfo) {"lidJid":"17222953082901@...","realJid":"919451175537@s....","service":"wasender-migration","timestamp":"2025-10-24 23:20:40"}
+info: LID resolved to real JID, formatting real phone number {"lidId":"1722295308...","realJid":"919451175537@s....","service":"wasender-migration","timestamp":"2025-10-24 23:20:40"}
+info: Message PASSED filter - will be saved {"districts":[{"district":"Agra","language":"english","type":"district"}],"keywords":[{"keyword":"murder","language":"english","type":"keyword"},{"keyword":"rape","language":"english","type":"keyword"},{"keyword":"rape","language":"english","type":"keyword"},{"keyword":"rape","language":"hinglish","type":"keyword"}],"messageId":"ACE4A16C84743611D15E1A04D7FEADA5","processingTime":0,"service":"wasender-migration","timestamp":"2025-10-24 23:20:40"}
+info: Message passed filter - proceeding with database storage {"districtMatches":1,"keywordMatches":4,"messageId":"ACE4A16C84743611D15E1A04D7FEADA5","scenario":"message_only","service":"wasender-migration","timestamp":"2025-10-24 23:20:40"}
+info: Message PASSED filter - will be saved {"districts":[{"district":"Agra","language":"english","type":"district"}],"keywords":[{"keyword":"murder","language":"english","type":"keyword"},{"keyword":"rape","language":"english","type":"keyword"},{"keyword":"rape","language":"english","type":"keyword"},{"keyword":"rape","language":"hinglish","type":"keyword"}],"processingTime":0,"service":"wasender-migration","timestamp":"2025-10-24 23:20:40"}
+✅ Message passed filter - saving to database
+- Message ID: ACE4A16C84743611D15E1A04D7FEADA5
+- Scenario: message_only
+- District Matches: [ 'Agra' ]
+- Keyword Matches: [ 'murder', 'rape', 'rape', 'rape' ]
+info: Processing webhook event {"dataSize":495,"event":"messages.received","metadata":{"ip":"2a02:4780:2d:dbe8::1","processingTime":0,"timestamp":"2025-10-24T17:50:40.895Z","userAgent":"axios/1.8.4"},"processingId":"req_1761328240895_3kps4l62o","service":"wasender-migration","timestamp":"2025-10-24 23:20:40"}
+info: Processing message batch {"messageCount":1,"metadata":{"ip":"2a02:4780:2d:dbe8::1","processingTime":0,"timestamp":"2025-10-24T17:50:40.895Z","userAgent":"axios/1.8.4"},"service":"wasender-migration","timestamp":"2025-10-24 23:20:40"}
+info: Processing individual message {"from":"120363407648087275@g.us","hasMedia":false,"messageId":"ACE4A16C84743611D15E1A04D7FEADA5","metadata":{"ip":"2a02:4780:2d:dbe8::1","processingTime":0,"timestamp":"2025-10-24T17:50:40.895Z","userAgent":"axios/1.8.4"},"participant":"17222953082901@lid","service":"wasender-migration","timestamp":"2025-10-24 23:20:40","type":"conversation"}
+📝 Processing WhatsApp message for database storage:
+- Message ID: ACE4A16C84743611D15E1A04D7FEADA5
+- Group ID: 120363407648087275@g.us
+- Group Name: Testing Group
+- Sender: Indra Pal Verma
+- Message Type: text
+📝 Processing user information for database storage:
+- Platform User ID: 17222953082901@lid
+- Display Name: Indra Pal Verma
+- Phone Number: +91 94511 75537
+- Is Business: false
+info: Processing webhook event {"dataSize":495,"event":"messages-group.received","metadata":{"ip":"2a02:4780:2d:dbe8::1","processingTime":1,"timestamp":"2025-10-24T17:50:40.937Z","userAgent":"axios/1.8.4"},"processingId":"req_1761328240937_gx903vtn6","service":"wasender-migration","timestamp":"2025-10-24 23:20:40"}
+info: Processing message batch {"messageCount":1,"metadata":{"ip":"2a02:4780:2d:dbe8::1","processingTime":1,"timestamp":"2025-10-24T17:50:40.937Z","userAgent":"axios/1.8.4"},"service":"wasender-migration","timestamp":"2025-10-24 23:20:40"}
+info: Processing individual message {"from":"120363407648087275@g.us","hasMedia":false,"messageId":"ACE4A16C84743611D15E1A04D7FEADA5","metadata":{"ip":"2a02:4780:2d:dbe8::1","processingTime":1,"timestamp":"2025-10-24T17:50:40.937Z","userAgent":"axios/1.8.4"},"participant":"17222953082901@lid","service":"wasender-migration","timestamp":"2025-10-24 23:20:40","type":"conversation"}
+✅ Created new PostUser with comprehensive data: 3262
+- Display Name: Indra Pal Verma
+- Mobile Number: +91 94511 75537
+- Business Account: false
+📊 Processing group metadata: {
+  groupId: '120363407648087275@g.us',
+  groupName: 'Testing Group',
+  participantCount: null
+}
+🔄 Creating PostBank record with enhanced data...
+✅ PostBank record created with ID: 2950
+✅ Updated message processing status to PROCESSED for 1 record(s)
+✅ MESSAGE SAVE SUCCESSFUL!
+PostBank ID: 2950
+Group: Testing Group
+Processing Status: PROCESSED
+info: Message stored successfully in database {"groupId":"120363407648087275@g.us","messageId":"ACE4A16C84743611D15E1A04D7FEADA5","postBankId":2950,"processingStatus":"PROCESSED","service":"wasender-migration","timestamp":"2025-10-24 23:20:41"}
+info: Message stored in database successfully {"groupId":"120363407648087275@g.us","messageId":"ACE4A16C84743611D15E1A04D7FEADA5","postBankId":2950,"service":"wasender-migration","timestamp":"2025-10-24 23:20:41"}
+info: Group message processed successfully {"groupId":"120363407648087275@g.us","groupName":"Testing Group","hasMedia":false,"messageId":"ACE4A16C84743611D15E1A04D7FEADA5","messageType":"text","metadata":{"ip":"2a02:4780:2d:dbe8::1","processingTime":0,"timestamp":"2025-10-24T17:50:40.889Z","userAgent":"axios/1.8.4"},"processingTime":"133ms","service":"wasender-migration","stored":true,"timestamp":"2025-10-24 23:20:41"}
+info: Group message ready for database storage {"groupId":"120363407648087275@g.us","hasMedia":false,"messageId":"ACE4A16C84743611D15E1A04D7FEADA5","service":"wasender-migration","timestamp":"2025-10-24 23:20:41"}
+info: Processing webhook event {"dataSize":482,"event":"messages.upsert","metadata":{"ip":"2a02:4780:2d:dbe8::1","processingTime":1,"timestamp":"2025-10-24T17:51:16.945Z","userAgent":"axios/1.8.4"},"processingId":"req_1761328276945_534km4op1","service":"wasender-migration","timestamp":"2025-10-24 23:21:16"}
+info: Processing message batch {"messageCount":1,"metadata":{"ip":"2a02:4780:2d:dbe8::1","processingTime":1,"timestamp":"2025-10-24T17:51:16.945Z","userAgent":"axios/1.8.4"},"service":"wasender-migration","timestamp":"2025-10-24 23:21:16"}
+info: Processing individual message {"from":"120363407648087275@g.us","hasMedia":false,"messageId":"AC6B82C8E4577F00F87EB68EE14641E1","metadata":{"ip":"2a02:4780:2d:dbe8::1","processingTime":1,"timestamp":"2025-10-24T17:51:16.945Z","userAgent":"axios/1.8.4"},"participant":"17222953082901@lid","service":"wasender-migration","timestamp":"2025-10-24 23:21:16","type":"conversation"}
+info: Processing @lid format (WhatsApp privacy ID) {"fullLength":14,"lidId":"1722295308...","service":"wasender-migration","timestamp":"2025-10-24 23:21:16"}
+info: LID resolved to real JID (from groupInfo) {"lidJid":"17222953082901@...","realJid":"919451175537@s....","service":"wasender-migration","timestamp":"2025-10-24 23:21:16"}
+info: LID resolved to real JID, formatting real phone number {"lidId":"1722295308...","realJid":"919451175537@s....","service":"wasender-migration","timestamp":"2025-10-24 23:21:16"}
+info: Message filtered out - not saving to database {"hasDistrict":true,"hasKeyword":false,"messageId":"AC6B82C8E4577F00F87EB68EE14641E1","reason":"has_district_but_no_keyword","scenario":"message_only","service":"wasender-migration","timestamp":"2025-10-24 23:21:16"}
+info: Group message ready for database storage {"groupId":"120363407648087275@g.us","hasMedia":false,"messageId":"AC6B82C8E4577F00F87EB68EE14641E1","service":"wasender-migration","timestamp":"2025-10-24 23:21:16"}
+info: Processing webhook event {"dataSize":482,"event":"messages-group.received","metadata":{"ip":"2a02:4780:2d:dbe8::1","processingTime":2,"timestamp":"2025-10-24T17:51:16.947Z","userAgent":"axios/1.8.4"},"processingId":"req_1761328276948_yn0kt83u0","service":"wasender-migration","timestamp":"2025-10-24 23:21:16"}
+info: Processing message batch {"messageCount":1,"metadata":{"ip":"2a02:4780:2d:dbe8::1","processingTime":2,"timestamp":"2025-10-24T17:51:16.947Z","userAgent":"axios/1.8.4"},"service":"wasender-migration","timestamp":"2025-10-24 23:21:16"}
+info: Processing individual message {"from":"120363407648087275@g.us","hasMedia":false,"messageId":"AC6B82C8E4577F00F87EB68EE14641E1","metadata":{"ip":"2a02:4780:2d:dbe8::1","processingTime":2,"timestamp":"2025-10-24T17:51:16.947Z","userAgent":"axios/1.8.4"},"participant":"17222953082901@lid","service":"wasender-migration","timestamp":"2025-10-24 23:21:16","type":"conversation"}
+info: Processing webhook event {"dataSize":482,"event":"messages.received","metadata":{"ip":"2a02:4780:2d:dbe8::1","processingTime":0,"timestamp":"2025-10-24T17:51:16.952Z","userAgent":"axios/1.8.4"},"processingId":"req_1761328276952_bmyjqj4vf","service":"wasender-migration","timestamp":"2025-10-24 23:21:16"}
+info: Processing message batch {"messageCount":1,"metadata":{"ip":"2a02:4780:2d:dbe8::1","processingTime":0,"timestamp":"2025-10-24T17:51:16.952Z","userAgent":"axios/1.8.4"},"service":"wasender-migration","timestamp":"2025-10-24 23:21:16"}
+info: Processing individual message {"from":"120363407648087275@g.us","hasMedia":false,"messageId":"AC6B82C8E4577F00F87EB68EE14641E1","metadata":{"ip":"2a02:4780:2d:dbe8::1","processingTime":0,"timestamp":"2025-10-24T17:51:16.952Z","userAgent":"axios/1.8.4"},"participant":"17222953082901@lid","service":"wasender-migration","timestamp":"2025-10-24 23:21:16","type":"conversation"}
+Client disconnected
+API: Status request received
+API: Using Wasender SessionManager
+Fetching sessions from Wasender API...
+New client connected
+Found session: { id: 25946, name: 'matrixSession', status: 'connected' }
+
+new lofs found is goof right ?
+

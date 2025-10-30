@@ -9,6 +9,7 @@ const { initializeModels } = require('../models');
 const crypto = require('crypto');
 const MediaDownloadService = require('./mediaDownloadService');
 const MediaQueueService = require('./mediaQueueService');
+const MessageFilterService = require('./messageFilterService');
 
 class DatabaseService {
   constructor() {
@@ -18,6 +19,7 @@ class DatabaseService {
     this.attachmentProcessingService = null;
     this.mediaDownloadService = new MediaDownloadService();
     this.mediaQueueService = null; // Will be initialized after database connection
+    this.messageFilterService = new MessageFilterService(); // Message filtering service
   }
 
   /**
@@ -154,15 +156,72 @@ class DatabaseService {
   }
 
   /**
-   * Save group message from Wasender API webhook to database
+   * Save group message from Wasender API webhook to database with filtering
    * Maps WhatsApp message data to PostBank model with proper relationships
-   * Implements message data transformation, group metadata extraction and storage, and message status tracking
+   * Implements district and keyword filtering before saving
    * @param {Object} messageData - WhatsApp message data from Wasender webhook
    * @param {Object} groupInfo - Group information extracted from message
    * @param {Object} userInfo - User information extracted from message
-   * @returns {Promise<number>} - PostBank record ID
+   * @returns {Promise<Object>} - Save result with filtering information
    */
   async saveGroupMessage(messageData, groupInfo, userInfo) {
+    // First apply filtering to determine if message should be saved
+    const normalizedMessageData = {
+      messageText: this.extractMessageText(messageData),
+      messageType: this.determineMessageType(messageData.message),
+      groupInfo: groupInfo,
+      mediaInfo: {
+        hasMedia: this.hasAttachments(messageData.message),
+        mediaType: this.determineMessageType(messageData.message)
+      }
+    };
+
+    const filterResult = this.messageFilterService.shouldProcessMessage(normalizedMessageData);
+    
+    if (!filterResult.shouldSave) {
+      console.log('🚫 Message filtered out - not saving to database');
+      console.log('- Message ID:', messageData.key?.id);
+      console.log('- Reason:', filterResult.reason);
+      console.log('- Scenario:', filterResult.scenario);
+      
+      if (filterResult.filterDetails) {
+        console.log('- Has District:', filterResult.filterDetails.hasDistrict);
+        console.log('- Has Keyword:', filterResult.filterDetails.hasKeyword);
+        console.log('- District Matches:', filterResult.filterDetails.districtMatches?.map(m => m.district) || []);
+        console.log('- Keyword Matches:', filterResult.filterDetails.keywordMatches?.map(m => m.keyword) || []);
+      }
+
+      return {
+        success: true,
+        filtered: true,
+        reason: filterResult.reason,
+        scenario: filterResult.scenario,
+        messageId: messageData.key?.id,
+        filterDetails: filterResult.filterDetails
+      };
+    }
+
+    // Message passed filter - proceed with normal saving
+    console.log('✅ Message passed filter - saving to database');
+    console.log('- Message ID:', messageData.key?.id);
+    console.log('- Scenario:', filterResult.scenario);
+    if (filterResult.filterDetails) {
+      console.log('- District Matches:', filterResult.filterDetails.districtMatches?.map(m => m.district) || []);
+      console.log('- Keyword Matches:', filterResult.filterDetails.keywordMatches?.map(m => m.keyword) || []);
+    }
+
+    return await this.saveGroupMessageToDatabase(messageData, groupInfo, userInfo, filterResult);
+  }
+
+  /**
+   * Internal method to save message to database (called after filtering)
+   * @param {Object} messageData - WhatsApp message data from Wasender webhook
+   * @param {Object} groupInfo - Group information extracted from message
+   * @param {Object} userInfo - User information extracted from message
+   * @param {Object} filterResult - Result from filtering process
+   * @returns {Promise<Object>} - PostBank record result
+   */
+  async saveGroupMessageToDatabase(messageData, groupInfo, userInfo, filterResult = null) {
     if (!this.isConnected) {
       await this.reconnect();
     }
@@ -854,6 +913,31 @@ class DatabaseService {
       console.log(`✅ Processed ${attachments.length} attachment(s) using legacy method`);
       return attachments.map(a => ({ success: true, attachmentType: a.type }));
     }
+  }
+
+  /**
+   * Extract message text for filtering purposes
+   * @param {Object} messageData - WhatsApp message data
+   * @returns {string} - Extracted text content
+   */
+  extractMessageText(messageData) {
+    const message = messageData.message;
+    if (!message) return '';
+
+    // Extract text from different message types
+    if (message.conversation) {
+      return message.conversation;
+    } else if (message.extendedTextMessage) {
+      return message.extendedTextMessage.text || '';
+    } else if (message.imageMessage) {
+      return message.imageMessage.caption || '';
+    } else if (message.videoMessage) {
+      return message.videoMessage.caption || '';
+    } else if (message.documentMessage) {
+      return message.documentMessage.caption || message.documentMessage.fileName || '';
+    }
+
+    return '';
   }
 
   /**

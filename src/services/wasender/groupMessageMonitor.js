@@ -25,6 +25,7 @@
  */
 
 const logger = require('../loggingService').getServiceLogger('group-message-monitor');
+const MessageFilterService = require('../messageFilterService');
 
 class GroupMessageMonitor {
     constructor(databaseService = null, wasenderClient = null) {
@@ -33,6 +34,7 @@ class GroupMessageMonitor {
         this.userCache = new Map(); // Cache user information
         this.databaseService = databaseService; // Database service for user information persistence
         this.wasenderClient = wasenderClient; // Wasender client for API calls
+        this.messageFilterService = new MessageFilterService(); // Message filtering service
 
         // Initialize metrics for monitoring
         this.metrics = {
@@ -43,7 +45,9 @@ class GroupMessageMonitor {
             processingErrors: 0,
             mediaMessagesProcessed: 0,
             userInfoUpdates: 0,
-            newUsersCreated: 0
+            newUsersCreated: 0,
+            filteredOutMessages: 0,
+            savedMessages: 0
         };
 
         // Validate WasenderClient initialization
@@ -118,6 +122,38 @@ class GroupMessageMonitor {
 
             // Extract and normalize message data with enhanced processing
             const normalizedMessage = await this.extractAndNormalizeMessage(messageData, metadata);
+
+            // Apply district and keyword filtering
+            const filterResult = this.messageFilterService.shouldProcessMessage(normalizedMessage);
+            
+            if (!filterResult.shouldSave) {
+                this.metrics.filteredOutMessages++;
+                logger.info('Message filtered out - not saving to database', {
+                    messageId,
+                    reason: filterResult.reason,
+                    scenario: filterResult.scenario,
+                    hasDistrict: filterResult.filterDetails?.hasDistrict,
+                    hasKeyword: filterResult.filterDetails?.hasKeyword
+                });
+
+                return {
+                    success: true,
+                    messageId,
+                    normalizedMessage,
+                    filtered: true,
+                    filterResult,
+                    reason: 'filtered_out'
+                };
+            }
+
+            // Message passed filter - proceed with database storage
+            this.metrics.savedMessages++;
+            logger.info('Message passed filter - proceeding with database storage', {
+                messageId,
+                scenario: filterResult.scenario,
+                districtMatches: filterResult.filterDetails?.districtMatches?.length || 0,
+                keywordMatches: filterResult.filterDetails?.keywordMatches?.length || 0
+            });
 
             // Process and store message in database if database service is available
             let storageResult = null;

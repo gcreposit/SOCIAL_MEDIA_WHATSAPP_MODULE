@@ -184,6 +184,8 @@ class MessageFilterService {
 
             // Create detailed result
             const result = {
+                shouldSave: shouldSave,
+                hasDistrict: districtResult.hasDistrict,
                 hasKeyword: keywordResult.hasKeyword,
                 districtMatches: districtResult.matches,
                 keywordMatches: keywordResult.matches,

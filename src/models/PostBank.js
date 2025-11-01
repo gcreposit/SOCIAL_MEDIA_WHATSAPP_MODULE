@@ -182,7 +182,7 @@ module.exports = (sequelize) => {
 
     // WhatsApp specific fields for reference
     mobile_number: {
-      type: DataTypes.STRING(20),
+      type: DataTypes.STRING(50),
       allowNull: true,
       comment: 'Mobile number from original WhatsApp message'
     },

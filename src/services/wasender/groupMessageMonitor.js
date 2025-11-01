@@ -125,7 +125,7 @@ class GroupMessageMonitor {
 
             // Apply district and keyword filtering
             const filterResult = this.messageFilterService.shouldProcessMessage(normalizedMessage);
-            
+
             if (!filterResult.shouldSave) {
                 this.metrics.filteredOutMessages++;
                 logger.info('Message filtered out - not saving to database', {
@@ -400,10 +400,10 @@ class GroupMessageMonitor {
 
         // Extract group information and wait for API call to complete
         const groupName = await this.resolveGroupName(messageData, groupId);
-        
+
         // Get the cached group data (which now includes participant mapping from API call)
         const cachedGroupData = this.groupCache.get(groupId);
-        
+
         const groupInfo = {
             groupId: groupId,
             groupName: groupName,
@@ -490,9 +490,9 @@ class GroupMessageMonitor {
         // Try message data first
         let groupName = this.extractGroupName(messageData);
         if (groupName && groupName !== groupId) {
-            logger.info('Group name found in message data', { 
-                groupId: groupId.substring(0, 20) + '...', 
-                groupName 
+            logger.info('Group name found in message data', {
+                groupId: groupId.substring(0, 20) + '...',
+                groupName
             });
             return groupName;
         }
@@ -500,14 +500,14 @@ class GroupMessageMonitor {
         // Try API fetch if WasenderClient is available
         if (this.wasenderClient) {
             try {
-                logger.info('Attempting to fetch group name from Wasender API', { 
-                    groupId: groupId.substring(0, 20) + '...' 
+                logger.info('Attempting to fetch group name from Wasender API', {
+                    groupId: groupId.substring(0, 20) + '...'
                 });
                 const fetchedName = await this.fetchGroupName(groupId);
                 if (fetchedName) {
-                    logger.info('Group name fetched successfully from API', { 
-                        groupId: groupId.substring(0, 20) + '...', 
-                        groupName: fetchedName 
+                    logger.info('Group name fetched successfully from API', {
+                        groupId: groupId.substring(0, 20) + '...',
+                        groupName: fetchedName
                     });
                     return fetchedName;
                 }
@@ -520,7 +520,7 @@ class GroupMessageMonitor {
             }
         } else {
             // Log that WasenderClient is not available with actionable information
-            logger.warn('WasenderClient not available for group name fetch', { 
+            logger.warn('WasenderClient not available for group name fetch', {
                 groupId: groupId.substring(0, 20) + '...',
                 solution: 'Initialize WasenderClient in main application and pass to GroupMessageMonitor constructor'
             });
@@ -532,7 +532,7 @@ class GroupMessageMonitor {
                 logger.debug('Attempting to fetch group name from database', {
                     groupId: groupId.substring(0, 20) + '...'
                 });
-                
+
                 // Try to get group info from database
                 const dbGroupInfo = await this.databaseService.getGroupByJid?.(groupId);
                 if (dbGroupInfo && dbGroupInfo.name && dbGroupInfo.name !== groupId) {
@@ -552,11 +552,11 @@ class GroupMessageMonitor {
 
         // Fallback to formatted ID with better formatting
         const formattedName = this.formatGroupIdAsName(groupId);
-        logger.debug('Using formatted ID as group name fallback', { 
-            groupId: groupId.substring(0, 20) + '...', 
-            formattedName 
+        logger.debug('Using formatted ID as group name fallback', {
+            groupId: groupId.substring(0, 20) + '...',
+            formattedName
         });
-        
+
         return formattedName;
     }
 
@@ -596,7 +596,7 @@ class GroupMessageMonitor {
             if (response.data && response.data.success && response.data.data) {
                 const groupData = response.data.data;
                 const groupName = groupData.subject || groupData.name;
-                
+
                 if (groupName) {
                     logger.info('Group name fetched successfully', {
                         groupJid: groupJid.substring(0, 20) + '...',
@@ -615,7 +615,7 @@ class GroupMessageMonitor {
                                 jid: p.jid
                             }))
                         });
-                        
+
                         groupData.participants.forEach(participant => {
                             if (participant.lid && participant.jid) {
                                 participantMapping[participant.lid] = participant.jid;
@@ -626,7 +626,7 @@ class GroupMessageMonitor {
                             }
                         });
                     }
-                    
+
                     logger.info('Final participant mapping created', {
                         mappingSize: Object.keys(participantMapping).length,
                         mappingKeys: Object.keys(participantMapping)
@@ -682,7 +682,6 @@ class GroupMessageMonitor {
 
         // First check if groupInfo has participant mapping (most recent)
         if (groupInfo && groupInfo.participantMapping) {
-            const realJid = groupInfo.participantMapping[lidJid];
             if (realJid) {
                 logger.info('LID resolved to real JID (from groupInfo)', {
                     lidJid: lidJid.substring(0, 15) + '...',
@@ -738,12 +737,12 @@ class GroupMessageMonitor {
         // Special handling for @lid format (WhatsApp privacy-protected IDs in groups)
         if (jid.endsWith('@lid')) {
             const lidId = jid.split('@')[0];
-            
+
             logger.info('Processing @lid format (WhatsApp privacy ID)', {
                 lidId: lidId.substring(0, 10) + '...',
                 fullLength: lidId.length
             });
-            
+
             // Try to resolve LID to real JID using group participant mapping
             if (groupJid) {
                 const realJid = this.resolveLidToRealJid(jid, groupJid, groupInfo);
@@ -757,7 +756,7 @@ class GroupMessageMonitor {
                     return realFormatted;
                 }
             }
-            
+
             // Fallback: Check if the LID might contain an Indian number pattern
             if (lidId.startsWith('91') && lidId.length >= 12) {
                 // Try to format as Indian number, but mark as LID-derived
@@ -771,7 +770,7 @@ class GroupMessageMonitor {
                     return formatted + ' [LID]';
                 }
             }
-            
+
             // For non-Indian or unrecognizable LID patterns
             logger.warn('LID format detected but cannot extract Indian number', {
                 lidId: lidId.substring(0, 10) + '...'
@@ -785,9 +784,9 @@ class GroupMessageMonitor {
             logger.warn('Could not extract phone number from JID', { jid: jid.substring(0, 20) + '...' });
             return jid;
         }
-        
+
         let phoneNumber = phoneMatch[1];
-        
+
         // Handle Indian phone numbers specifically
         if (phoneNumber.length >= 10) {
             // Check if it already has country code
@@ -811,7 +810,7 @@ class GroupMessageMonitor {
             } else {
                 // For any other format, add + and basic formatting
                 phoneNumber = '+' + phoneNumber;
-                
+
                 // Apply generic formatting for readability
                 if (phoneNumber.length === 13 && phoneNumber.startsWith('+91')) {
                     phoneNumber = phoneNumber.replace(/(\+91)(\d{5})(\d{5})/, '$1 $2 $3');
@@ -823,13 +822,13 @@ class GroupMessageMonitor {
             // For shorter numbers, just add + prefix
             phoneNumber = '+' + phoneNumber;
         }
-        
+
         logger.debug('Phone number formatted for India', {
             originalJid: jid.substring(0, 20) + '...',
             formattedNumber: phoneNumber,
             isValidIndian: this.isValidIndianMobileNumber(phoneNumber)
         });
-        
+
         return phoneNumber;
     }
 
@@ -899,8 +898,28 @@ class GroupMessageMonitor {
      * @returns {Object} Comprehensive user information
      */
     extractComprehensiveUserData(messageKey, messageData, metadata = {}, groupInfo = null) {
-        const senderId = messageKey.participant || messageKey.remoteJid;
+        let senderId = messageKey.participant || messageKey.remoteJid;
         const groupJid = groupInfo ? groupInfo.groupId : null;
+
+        // CRITICAL FIX: If senderId is LID format, resolve to JID first
+        // LID: 221856636362974@lid (privacy ID - no phone number)
+        // JID: 917275147094@s.whatsapp.net (contains actual phone number)
+        if (senderId && senderId.endsWith('@lid') && groupJid) {
+            const realJid = this.resolveLidToRealJid(senderId, groupJid, groupInfo);
+            if (realJid) {
+                logger.info('Resolved LID to JID for phone extraction', {
+                    lid: senderId.substring(0, 15) + '...',
+                    jid: realJid.substring(0, 15) + '...'
+                });
+                senderId = realJid; // Use JID which contains the actual phone number
+            } else {
+                logger.warn('Could not resolve LID to JID - using fallback', {
+                    lid: senderId.substring(0, 15) + '...',
+                    groupJid: groupJid.substring(0, 20) + '...'
+                });
+            }
+        }
+
         const phoneNumber = this.extractPhoneNumber(senderId, groupJid, groupInfo);
 
         // Extract display name from multiple possible sources
@@ -1275,14 +1294,14 @@ class GroupMessageMonitor {
             '70': 'Airtel', '71': 'Airtel', '72': 'Airtel', '73': 'Airtel', '74': 'Airtel',
             '75': 'Airtel', '76': 'Airtel', '77': 'Airtel', '78': 'Airtel', '79': 'Airtel',
             '80': 'Airtel', '81': 'Airtel', '82': 'Airtel', '83': 'Airtel', '84': 'Airtel',
-            
+
             // Jio
             '60': 'Jio', '61': 'Jio', '62': 'Jio', '63': 'Jio', '88': 'Jio', '89': 'Jio',
-            
+
             // Vi (Vodafone Idea)
             '90': 'Vi', '91': 'Vi', '92': 'Vi', '93': 'Vi', '94': 'Vi', '95': 'Vi',
             '96': 'Vi', '97': 'Vi', '98': 'Vi', '99': 'Vi',
-            
+
             // BSNL
             '64': 'BSNL', '65': 'BSNL', '66': 'BSNL', '67': 'BSNL', '68': 'BSNL', '69': 'BSNL'
         };

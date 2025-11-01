@@ -106,6 +106,10 @@ class Server {
     const mediaQueueRoutes = require('./routes/mediaQueue');
     this.app.use('/api/queue', mediaQueueRoutes);
     
+    // Group management routes
+    const groupRoutes = require('./routes/groupRoutes');
+    this.app.use('/api/groups', groupRoutes);
+    
     // Make database service available to routes
     this.app.set('databaseService', this.dbService);
     
@@ -127,6 +131,11 @@ class Server {
     // QR code authentication route
     this.app.get('/qr', (req, res) => {
       res.sendFile(path.join(__dirname, 'public', 'qr.html'));
+    });
+    
+    // Group management page route
+    this.app.get('/group_page.html', (req, res) => {
+      res.sendFile(path.join(__dirname, '../public', 'group_page.html'));
     });
   }
   

@@ -135,7 +135,7 @@ class Server {
     
     // Group management page route
     this.app.get('/group_page.html', (req, res) => {
-      res.sendFile(path.join(__dirname, '../public', 'group_page.html'));
+      res.sendFile(path.join(__dirname, 'public', 'group_page.html'));
     });
   }
   

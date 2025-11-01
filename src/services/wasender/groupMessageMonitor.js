@@ -682,6 +682,7 @@ class GroupMessageMonitor {
 
         // First check if groupInfo has participant mapping (most recent)
         if (groupInfo && groupInfo.participantMapping) {
+            const realJid = groupInfo.participantMapping[lidJid];
             if (realJid) {
                 logger.info('LID resolved to real JID (from groupInfo)', {
                     lidJid: lidJid.substring(0, 15) + '...',

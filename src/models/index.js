@@ -16,7 +16,7 @@ function initializeModels(sequelize) {
   const PostBank = PostBankModel(sequelize);
   const CommonAttachment = CommonAttachmentModel(sequelize);
   const PostUser = PostUserModel(sequelize);
-  const WhatsappGroupNames = WhatsappGroupNamesModel;
+  const WhatsappGroupNames = WhatsappGroupNamesModel(sequelize);
 
   // Set up associations
   PostBank.hasMany(CommonAttachment, {

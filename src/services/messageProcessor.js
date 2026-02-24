@@ -30,10 +30,10 @@ class MessageProcessor {
       };
       console.log(util.inspect(messageInfo, { colors: true, depth: null }));
       console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-      
+
       // Extract message data
       const messageData = await this.extractMessageData(rawMessage);
-      
+
       // Check if this is a reply to another message
       if (rawMessage.hasQuotedMsg) {
         try {
@@ -41,10 +41,10 @@ class MessageProcessor {
           const quotedMsg = await rawMessage.getQuotedMessage();
           console.log('Got quoted message, has media:', quotedMsg.hasMedia);
           console.log('Quoted message type:', quotedMsg.type);
-          
+
           const quotedData = await this.extractReplyData(quotedMsg);
           console.log('Extracted reply data:', util.inspect(quotedData, { colors: true, depth: null }));
-          
+
           if (quotedData) {
             messageData.replyToMessageId = quotedData.messageId;
             // Use replyText from quotedData if available (for video attachments)
@@ -54,7 +54,7 @@ class MessageProcessor {
             messageData.replyAttachmentPath = quotedData.attachmentPath;
             // Add unified attachment_type field
             messageData.attachmentType = messageData.attachmentType || null;
-            
+
             // Verify attachment type and path are correctly set
             if (messageData.replyAttachmentPath && !messageData.replyAttachmentType) {
               // Infer type from path if missing
@@ -69,24 +69,24 @@ class MessageProcessor {
               }
               console.log('Inferred replyAttachmentType from path:', messageData.replyAttachmentType);
             }
-            
+
             console.log('Setting reply data in messageData:');
             console.log('- replyToMessageId:', messageData.replyToMessageId);
             console.log('- replyText:', messageData.replyText);
             console.log('- replyAttachmentType:', messageData.replyAttachmentType);
             console.log('- replyAttachmentPath:', messageData.replyAttachmentPath);
-            
+
             // For video replies, ensure replyText contains the path if empty
             if (quotedData.attachmentType === 'video' && (!messageData.replyText || messageData.replyText.trim() === '')) {
               messageData.replyText = quotedData.attachmentPath;
               console.log('Setting replyText to video path in processMessage:', messageData.replyText);
             }
-            
+
             // Special handling for video and audio attachments
             if (quotedMsg.hasMedia) {
               if (quotedMsg.type === 'video' && !messageData.replyAttachmentType) {
                 messageData.replyAttachmentType = 'video';
-                
+
                 // If we don't have a path yet, generate one
                 if (!messageData.replyAttachmentPath) {
                   const timestamp = quotedMsg.timestamp ? quotedMsg.timestamp * 1000 : new Date().getTime();
@@ -96,7 +96,7 @@ class MessageProcessor {
                 }
               } else if (quotedMsg.type === 'audio' && !messageData.replyAttachmentType) {
                 messageData.replyAttachmentType = 'audio';
-                
+
                 // If we don't have a path yet, generate one
                 if (!messageData.replyAttachmentPath) {
                   const timestamp = quotedMsg.timestamp ? quotedMsg.timestamp * 1000 : new Date().getTime();
@@ -111,7 +111,7 @@ class MessageProcessor {
           console.error('Error processing reply:', replyError);
         }
       }
-      
+
       // Check for links in the message text and process them
       const linkData = await this.extractAndProcessLinks(messageData.messageText);
       if (linkData) {
@@ -123,13 +123,13 @@ class MessageProcessor {
           messageData.messageText = messageData.messageText.replace(linkData.extractedLink, '').trim();
         }
       }
-      
+
       // Process attachments if present
       if (rawMessage.hasMedia) {
         try {
           // Check if this is part of a batch
           const isBatchAttachment = this.isBatchAttachment(rawMessage);
-          
+
           if (isBatchAttachment) {
             // Process as part of a batch
             const batchData = await this.processBatchAttachment(rawMessage);
@@ -152,12 +152,12 @@ class MessageProcessor {
           // Continue processing the message even if attachment fails
         }
       }
-      
+
       // Validate message
       if (!this.validateMessage(messageData)) {
         return null;
       }
-      
+
       // Format message data for storage
       return this.formatMessageData(messageData);
     } catch (error) {
@@ -165,7 +165,7 @@ class MessageProcessor {
       return null;
     }
   }
-  
+
   /**
    * Extract and process links from message text
    * @param {string} messageText - Message text to extract links from
@@ -174,34 +174,34 @@ class MessageProcessor {
   async extractAndProcessLinks(messageText) {
     try {
       if (!messageText) return null;
-      
+
       // Regular expression to find URLs in text
       const urlRegex = /(https?:\/\/[^\s]+)/g;
       const matches = messageText.match(urlRegex);
-      
+
       if (!matches || matches.length === 0) return null;
-      
+
       console.log('Found links in message:', matches);
-      
+
       // Process all links found
       const links = [];
-      
+
       for (let url of matches) {
         try {
           // Remove any backticks from the URL
           url = url.replace(/`/g, '');
           url = url.trim();
-          
+
           console.log('Processing cleaned URL:', url);
-          
+
           // Process link metadata - await the Promise
           const linkData = await this.attachmentService.saveLinkAttachment(url, {
             extractedFrom: 'message',
             extractedAt: new Date().toISOString()
           });
-          
+
           console.log('Link data from attachmentService (resolved):', linkData);
-          
+
           if (linkData && linkData.url) {
             // Just store the URL directly
             console.log('Adding URL to links array:', linkData.url);
@@ -211,11 +211,11 @@ class MessageProcessor {
           console.error(`Error processing link ${url}:`, error);
         }
       }
-      
+
       if (links.length === 0) return null;
-      
+
       console.log('Final links array:', links);
-      
+
       return {
         extractedLink: matches[0], // Keep the first link for backward compatibility
         linkMetadata: links // Return the links array directly, not as a JSON string
@@ -226,7 +226,7 @@ class MessageProcessor {
       return null;
     }
   }
-  
+
   /**
    * Check if message is part of a batch attachment
    * @param {Object} rawMessage - Raw WhatsApp message
@@ -236,11 +236,11 @@ class MessageProcessor {
     // This is a placeholder for batch detection logic
     // In a real implementation, you might check for specific markers in the message
     // or use timing and sender information to group messages
-    
+
     // For now, we'll assume it's not a batch
     return false;
   }
-  
+
   /**
    * Process a batch of attachments
    * @param {Object} rawMessage - Raw WhatsApp message
@@ -261,14 +261,14 @@ class MessageProcessor {
     try {
       // Get chat (group) information
       const chat = await rawMessage.getChat();
-      
+
       // Get contact (sender) information
       const contact = await rawMessage.getContact();
-      
+
       // Extract mobile number from contact ID
       // WhatsApp contact ID format is usually like: "1234567890@c.us"
       const mobileNumber = contact.id._serialized.split('@')[0];
-      
+
       // Enhanced logging for group and sender information with color
       // Add a single util declaration at the top of the function
       const util = require('util');
@@ -289,7 +289,7 @@ class MessageProcessor {
       };
       console.log(util.inspect(extractionInfo, { colors: true, depth: null }));
       console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-      
+
       return {
         messageId: rawMessage.id._serialized,
         groupId: chat.id._serialized,
@@ -306,7 +306,7 @@ class MessageProcessor {
       throw error;
     }
   }
-  
+
   /**
    * Extract data from a quoted/replied message
    * @param {Object} quotedMsg - The quoted message object
@@ -315,10 +315,10 @@ class MessageProcessor {
   async extractReplyData(quotedMsg) {
     try {
       if (!quotedMsg) return null;
-      
+
       // Add a single util declaration at the top of the function
       const util = require('util');
-      
+
       // Enhanced logging for reply data extraction with color
       console.log('💬 REPLY DATA EXTRACTION 💬');
       console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
@@ -330,16 +330,16 @@ class MessageProcessor {
       };
       console.log(util.inspect(replyInfo, { colors: true, depth: null }));
       console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-      
+
       // Determine attachment type and path
       let attachmentType = null;
       let attachmentPath = null;
-      
+
       if (quotedMsg.hasMedia) {
         console.log('📎 Quoted message has media, processing attachment...');
         const mediaData = await quotedMsg.downloadMedia();
         console.log('📄 Media data downloaded:', util.inspect({ mimetype: mediaData?.mimetype || 'unknown' }, { colors: true, depth: null }));
-        
+
         if (mediaData && mediaData.mimetype) {
           if (mediaData.mimetype.startsWith('image/')) {
             attachmentType = 'image';
@@ -380,7 +380,7 @@ class MessageProcessor {
         // Check if the message contains a link
         const urlRegex = /(https?:\/\/[^\s]+)/g;
         const matches = quotedMsg.body.match(urlRegex);
-        
+
         if (matches && matches.length > 0) {
           attachmentType = 'link';
           // Store the URL as the attachment path for links
@@ -388,16 +388,16 @@ class MessageProcessor {
           console.log('Reply to link attachment path set to:', util.inspect({ path: attachmentPath }, { colors: true, depth: null }));
         }
       }
-      
+
       // For video replies, also set the replyText to the attachmentPath
       // This ensures the video path is available in the reply_text field
       let replyText = quotedMsg.body;
-      
+
       // If it's a video attachment and there's no text, use the path as the reply text
       if (attachmentType === 'video' && (!replyText || replyText.trim() === '')) {
         replyText = attachmentPath;
       }
-      
+
       // Ensure attachmentType and attachmentPath are set correctly for videos
       if (quotedMsg.hasMedia && !attachmentType) {
         // If we couldn't determine the type from mimetype, try to infer from other properties
@@ -409,7 +409,7 @@ class MessageProcessor {
           console.log('Inferred video attachment from message type:', util.inspect({ path: attachmentPath }, { colors: true, depth: null }));
         }
       }
-      
+
       // Final check to ensure video paths are correctly set
       if (attachmentType === 'video' && !attachmentPath) {
         const timestamp = quotedMsg.timestamp ? quotedMsg.timestamp * 1000 : new Date().getTime();
@@ -417,7 +417,7 @@ class MessageProcessor {
         attachmentPath = `VIDEOS/${filename}`;
         console.log('Fixed missing video attachment path:', util.inspect({ path: attachmentPath }, { colors: true, depth: null }));
       }
-      
+
       const result = {
         messageId: quotedMsg.id._serialized,
         messageText: quotedMsg.body,
@@ -425,7 +425,7 @@ class MessageProcessor {
         attachmentPath,
         replyText: replyText
       };
-      
+
       console.log('Final reply data being returned:', util.inspect(result, { colors: true, depth: null }));
       return result;
     } catch (error) {
@@ -442,37 +442,37 @@ class MessageProcessor {
   validateMessage(message) {
     // Add a single util declaration at the top of the function
     const util = require('util');
-    
+
     // Process both group and individual messages
     // No longer rejecting non-group messages as per user request
     if (!message.isGroup) {
       console.log(util.inspect({ info: 'Processing individual (non-group) message' }, { colors: true, depth: null }));
       // Continue processing individual messages
     }
-    
+
     // Check if message has required fields
     // For group messages, we need groupId; for individual messages, we need senderName
     if ((message.isGroup && !message.groupId) || !message.senderName) {
       console.log(util.inspect({ rejected: 'Missing required fields' }, { colors: true, depth: null }));
       return false;
     }
-    
+
     // Check if message has either text content, any type of attachment, or is a reply
     // Allow empty messages in group chats as they might be system notifications or status updates
-    if (message.messageText.trim() === '' && 
-        !message.imageAttachmentPath && 
-        !message.documentAttachmentPath && 
-        !message.videoAttachmentPath && 
-        !message.audioAttachmentPath && 
-        !message.linkMetadata && 
-        !message.batchAttachmentPath &&
-        !message.replyToMessageId) {
+    if (message.messageText.trim() === '' &&
+      !message.imageAttachmentPath &&
+      !message.documentAttachmentPath &&
+      !message.videoAttachmentPath &&
+      !message.audioAttachmentPath &&
+      !message.linkMetadata &&
+      !message.batchAttachmentPath &&
+      !message.replyToMessageId) {
       console.log(util.inspect({ rejected: 'Empty message with no attachments or reply context' }, { colors: true, depth: null }));
       // We'll still accept the message if it's from a group, as it might be a system message
       // or status update that we want to track
       return true;
     }
-    
+
     return true;
   }
 
@@ -485,7 +485,7 @@ class MessageProcessor {
     try {
       // Add a single util declaration at the top of the function
       const util = require('util');
-      
+
       // Enhanced logging for attachment processing with color
       console.log('📎 ATTACHMENT PROCESSING 📎');
       console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
@@ -496,39 +496,39 @@ class MessageProcessor {
       };
       console.log(util.inspect(attachmentInfo, { colors: true, depth: null }));
       console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-      
+
       // Download media data
       const mediaData = await rawMessage.downloadMedia();
-      
+
       if (!mediaData || !mediaData.data) {
         console.log(util.inspect({ error: '❌ No media data found in message' }, { colors: true, depth: null }));
         return null;
       }
       console.log('✅ Media downloaded successfully:', util.inspect({ mimetype: mediaData.mimetype }, { colors: true, depth: null }));
-      
+
       // Extract media info
       const { data, mimetype, filename } = mediaData;
-      
+
       // Convert base64 data to buffer
       const buffer = Buffer.from(data, 'base64');
-      
+
       // Generate filename if not provided
       const attachmentFilename = filename || `attachment_${Date.now()}.${this.getFileExtensionFromMimeType(mimetype)}`;
-      
+
       // Extract metadata from media if available
       const metadata = {
         originalFilename: filename,
         mimeType: mimetype,
         timestamp: new Date().toISOString()
       };
-      
+
       // Save attachment
       const savedAttachment = await this.attachmentService.saveAttachment(buffer, attachmentFilename, mimetype, metadata);
-      
+
       if (!savedAttachment) {
         return null;
       }
-      
+
       // Return appropriate path based on attachment type
       const result = {
         imageAttachmentPath: null,
@@ -536,7 +536,7 @@ class MessageProcessor {
         videoAttachmentPath: null,
         audioAttachmentPath: null
       };
-      
+
       switch (savedAttachment.type) {
         case 'image':
           result.imageAttachmentPath = savedAttachment.relativePath;
@@ -551,14 +551,14 @@ class MessageProcessor {
           result.audioAttachmentPath = savedAttachment.relativePath;
           break;
       }
-      
+
       return result;
     } catch (error) {
       console.error('Error processing attachment:', util.inspect({ error: error.message }, { colors: true, depth: null }));
       return null;
     }
   }
-  
+
   /**
    * Get file extension from MIME type
    * @param {string} mimeType - MIME type
@@ -568,7 +568,7 @@ class MessageProcessor {
     // Add a single util declaration at the top of the function
     const util = require('util');
     console.log('Getting file extension for MIME type:', util.inspect({ mimeType }, { colors: true, depth: null }));
-    
+
     const mimeToExt = {
       'image/jpeg': 'jpg',
       'image/png': 'png',
@@ -588,7 +588,7 @@ class MessageProcessor {
       'video/3gpp': 'mp4',  // Common for mobile videos
       'video/x-matroska': 'mkv' // MKV format
     };
-    
+
     // Check if it's any kind of video
     if (mimeType && mimeType.startsWith('video/')) {
       const specificExt = mimeToExt[mimeType];
@@ -599,7 +599,7 @@ class MessageProcessor {
       console.log(util.inspect({ message: 'Generic video MIME type detected, using mp4 extension' }, { colors: true, depth: null }));
       return 'mp4'; // Default to mp4 for any video type not specifically listed
     }
-    
+
     // Extract extension from mime type if not in our mapping
     if (!mimeToExt[mimeType] && mimeType) {
       const parts = mimeType.split('/');
@@ -607,7 +607,7 @@ class MessageProcessor {
         return parts[1].split(';')[0]; // Handle cases like 'video/mp4;codecs=avc1'
       }
     }
-    
+
     const extension = mimeToExt[mimeType] || 'bin';
     console.log('Using extension:', util.inspect({ extension }, { colors: true, depth: null }));
     return extension;
@@ -625,7 +625,7 @@ class MessageProcessor {
    */
   formatPostBankData(message) {
     const util = require('util');
-    
+
     console.log('Formatting message data for PostBank storage:');
     console.log(util.inspect({
       messageText: message.messageText,
@@ -633,12 +633,12 @@ class MessageProcessor {
       senderName: message.senderName,
       timestamp: message.timestamp
     }, { colors: true, depth: null }));
-    
-    // Create date and time from timestamp
+
+    // Create date and time from timestamp in IST (UTC+5:30)
     const messageDate = new Date(message.timestamp);
-    const postDate = messageDate.toISOString().split('T')[0]; // YYYY-MM-DD format for database
-    const postTime = messageDate.toLocaleTimeString('en-US', { hour12: false }); // HH:mm:ss format
-    
+    const postDate = messageDate.toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' }); // YYYY-MM-DD in IST
+    const postTime = messageDate.toLocaleTimeString('en-GB', { timeZone: 'Asia/Kolkata', hour12: false }); // HH:mm:ss in IST
+
     const postBankData = {
       // PostBank specific fields
       post_title: '', // Always blank as specified
@@ -672,7 +672,7 @@ class MessageProcessor {
       channel_id: null,
       analysisStatus: 'NOT_ANALYZED', // Default for new WhatsApp messages
       post_id: null,
-      
+
       // WhatsApp specific fields to maintain compatibility
       mobile_number: message.mobileNumber || null,
       group_id: message.groupId || null,
@@ -680,7 +680,7 @@ class MessageProcessor {
     };
 
     console.log('🔍 FORMATTED POSTBANK DATA:', JSON.stringify(postBankData, null, 2));
-    
+
     return postBankData;
   }
 
@@ -693,9 +693,9 @@ class MessageProcessor {
   formatAttachmentData(message, postBankId) {
     const util = require('util');
     const attachments = [];
-    
+
     console.log('Formatting attachment data for CommonAttachment table:');
-    
+
     // Process main message attachments
     if (message.imageAttachmentPath) {
       attachments.push({
@@ -717,7 +717,7 @@ class MessageProcessor {
         download_status: 'completed'
       });
     }
-    
+
     if (message.videoAttachmentPath) {
       attachments.push({
         post_bank_id: postBankId,
@@ -738,7 +738,7 @@ class MessageProcessor {
         download_status: 'completed'
       });
     }
-    
+
     if (message.audioAttachmentPath) {
       attachments.push({
         post_bank_id: postBankId,
@@ -759,7 +759,7 @@ class MessageProcessor {
         download_status: 'completed'
       });
     }
-    
+
     if (message.documentAttachmentPath) {
       attachments.push({
         post_bank_id: postBankId,
@@ -780,7 +780,7 @@ class MessageProcessor {
         download_status: 'completed'
       });
     }
-    
+
     if (message.linkMetadata) {
       attachments.push({
         post_bank_id: postBankId,
@@ -801,7 +801,7 @@ class MessageProcessor {
         download_status: 'completed'
       });
     }
-    
+
     if (message.batchAttachmentPath) {
       attachments.push({
         post_bank_id: postBankId,
@@ -826,7 +826,7 @@ class MessageProcessor {
         download_status: 'completed'
       });
     }
-    
+
     // Process reply attachments as separate records if no main attachments exist
     if (attachments.length === 0 && message.replyAttachmentPath && message.replyAttachmentType) {
       console.log('📎 Creating separate record for reply attachment...');
@@ -853,29 +853,29 @@ class MessageProcessor {
         download_status: 'completed'
       });
     }
-    
+
     console.log(`🔍 FORMATTED ${attachments.length} ATTACHMENTS:`, util.inspect(attachments, { colors: true, depth: null }));
-    
+
     return attachments;
   }
 
   formatMessageData(message) {
     // Add a single util declaration at the top of the function
     const util = require('util');
-    
+
     console.log('Formatting message data for storage, checking reply data:');
     console.log(util.inspect({
       replyAttachmentType: message.replyAttachmentType,
       replyAttachmentPath: message.replyAttachmentPath,
       replyText: message.replyText
     }, { colors: true, depth: null }));
-    
+
     // For video replies, ensure replyText contains the video path if not already set
     if (message.replyAttachmentType === 'video' && (!message.replyText || message.replyText.trim() === '') && message.replyAttachmentPath) {
       message.replyText = message.replyAttachmentPath;
       console.log('Setting replyText to video path:', util.inspect({ replyText: message.replyText }, { colors: true, depth: null }));
     }
-    
+
     // Ensure replyAttachmentType and replyAttachmentPath are properly set for videos and audio
     if (message.replyAttachmentPath) {
       if (message.replyAttachmentPath.includes('VIDEOS/') && !message.replyAttachmentType) {
@@ -886,7 +886,7 @@ class MessageProcessor {
         console.log('Fixed missing replyAttachmentType for audio:', util.inspect({ type: message.replyAttachmentType }, { colors: true, depth: null }));
       }
     }
-    
+
     // Fix: Make sure replyAttachmentPath is not empty when replyAttachmentType is set
     if (message.replyAttachmentType && !message.replyAttachmentPath) {
       console.log('Warning: replyAttachmentType is set but replyAttachmentPath is empty');
@@ -901,7 +901,7 @@ class MessageProcessor {
         console.log('Generated missing audio path for reply:', util.inspect({ path: message.replyAttachmentPath }, { colors: true, depth: null }));
       }
     }
-    
+
     // Determine unified attachment type
     let attachmentType = null;
     if (message.imageAttachmentPath) {
@@ -939,7 +939,7 @@ class MessageProcessor {
     };
 
     console.log('🔍 FINAL FORMATTED MESSAGE:', JSON.stringify(formattedMessage, null, 2));
-    
+
     return formattedMessage;
   }
 }

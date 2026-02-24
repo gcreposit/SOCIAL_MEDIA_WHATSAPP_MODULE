@@ -44,7 +44,7 @@ class DatabaseService {
       'document': 4,  // Medium priority
       'video': 5      // Lower priority - largest files
     };
-    
+
     return priorities[mediaType] || 5;
   }
 
@@ -177,13 +177,13 @@ class DatabaseService {
     };
 
     const filterResult = this.messageFilterService.shouldProcessMessage(normalizedMessageData);
-    
+
     if (!filterResult.shouldSave) {
       console.log('🚫 Message filtered out - not saving to database');
       console.log('- Message ID:', messageData.key?.id);
       console.log('- Reason:', filterResult.reason);
       console.log('- Scenario:', filterResult.scenario);
-      
+
       if (filterResult.filterDetails) {
         console.log('- Has District:', filterResult.filterDetails.hasDistrict);
         console.log('- Has Keyword:', filterResult.filterDetails.hasKeyword);
@@ -563,14 +563,14 @@ class DatabaseService {
 
       // Add media to queue for background processing (production-ready approach)
       let mediaPath = attachmentData.url || attachmentData.filePath; // Default to original URL
-      
+
       if (attachmentData.url && attachmentData.mediaKey && this.mediaQueueService) {
         try {
           // Reconstruct the message object for queue processing
           const messageDataForDecryption = {
             message: {}
           };
-          
+
           const messageKey = `${attachmentData.type}Message`;
           messageDataForDecryption.message[messageKey] = {
             url: attachmentData.url,
@@ -590,10 +590,10 @@ class DatabaseService {
           });
 
           console.log(`📋 Media job queued for background processing: ${jobId}`);
-          
+
           // For now, store original URL - will be updated by queue when processing completes
           mediaPath = attachmentData.url;
-          
+
         } catch (error) {
           console.log('❌ Failed to queue media job:', error.message);
           mediaPath = attachmentData.url || attachmentData.filePath;
@@ -697,8 +697,8 @@ class DatabaseService {
    */
   transformMessageDataForPostBank(messageData, groupInfo, userInfo, authorUserId = null) {
     const messageTimestamp = new Date(messageData.messageTimestamp * 1000);
-    const postDate = messageTimestamp.toISOString().split('T')[0]; // YYYY-MM-DD format
-    const postTime = messageTimestamp.toLocaleTimeString('en-US', { hour12: false });
+    const postDate = messageTimestamp.toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' }); // YYYY-MM-DD in IST
+    const postTime = messageTimestamp.toLocaleTimeString('en-GB', { timeZone: 'Asia/Kolkata', hour12: false }); // HH:mm:ss in IST
 
     // Extract comprehensive message text content
     const messageContent = this.extractComprehensiveMessageContent(messageData.message);

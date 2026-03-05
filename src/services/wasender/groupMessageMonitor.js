@@ -921,7 +921,19 @@ class GroupMessageMonitor {
             }
         }
 
-        const phoneNumber = this.extractPhoneNumber(senderId, groupJid, groupInfo);
+        // Use Wasender's pre-cleaned phone number fields if available correctly
+        let phoneNumber = null;
+        if (messageData.key?.cleanedParticipantPn) {
+            phoneNumber = messageData.key.cleanedParticipantPn;
+            logger.info('Used cleanedParticipantPn from Wasender webhook', { phoneNumber: phoneNumber.substring(0, 5) + '...' });
+        } else if (messageData.key?.cleanedSenderPn) {
+            phoneNumber = messageData.key.cleanedSenderPn;
+            logger.info('Used cleanedSenderPn from Wasender webhook', { phoneNumber: phoneNumber.substring(0, 5) + '...' });
+        } else {
+            // Fallback
+            phoneNumber = this.extractPhoneNumber(senderId, groupJid, groupInfo);
+            logger.info('Fell back to extracting phone from JID', { phoneNumber: phoneNumber?.substring(0, 5) + '...' });
+        }
 
         // Extract display name from multiple possible sources
         const displayName = this.extractDisplayName(messageData, senderId);

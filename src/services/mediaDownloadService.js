@@ -16,7 +16,7 @@ class MediaDownloadService {
         this.baseUrl = process.env.BASE_URL || 'http://localhost:3000';
         this.wasenderApiKey = process.env.WASENDER_PERSONAL_ACCESS_TOKEN;
         this.wasenderBaseUrl = process.env.WASENDER_BASE_URL || 'https://wasenderapi.com';
-        
+
         // Ensure media directory exists
         this.initializeDirectories();
     }
@@ -58,15 +58,15 @@ class MediaDownloadService {
         try {
             // Step 1: Call Wasender decrypt-media API
             const decryptResult = await this.decryptMediaWithWasender(messageData, messageId);
-            
+
             if (!decryptResult.success) {
                 throw new Error(`Decryption failed: ${decryptResult.error}`);
             }
 
             // Step 2: Download from temporary public URL
             const downloadResult = await this.downloadFromPublicUrl(
-                decryptResult.publicUrl, 
-                messageId, 
+                decryptResult.publicUrl,
+                messageId,
                 decryptResult.mediaType,
                 decryptResult.mimeType
             );
@@ -96,11 +96,11 @@ class MediaDownloadService {
      */
     async decryptMediaWithWasender(messageData, messageId, retryCount = 0) {
         const maxRetries = 2;
-        
+
         try {
             // Determine media type and extract media info
             const mediaInfo = this.extractMediaInfo(messageData.message);
-            
+
             if (!mediaInfo) {
                 throw new Error('No media found in message');
             }
@@ -118,7 +118,33 @@ class MediaDownloadService {
             };
 
             // Add the specific media type to payload
-            payload.data.messages.message[mediaInfo.messageType] = mediaInfo.mediaData;
+            // Strip heavy fields like thumbnails and scansSidecar to prevent 500 Payload Too Large errors
+            const requiredFields = [
+                'url', 'mimetype', 'fileSha256', 'fileLength', 'height', 'width',
+                'mediaKey', 'fileEncSha256', 'directPath', 'caption', 'seconds', 'duration'
+            ];
+
+            const sanitizedMediaData = {};
+            for (const field of requiredFields) {
+                if (mediaInfo.mediaData[field] !== undefined) {
+                    sanitizedMediaData[field] = mediaInfo.mediaData[field];
+                }
+            }
+
+            // Explicitly convert only binary fields to base64
+            const binaryFields = ['mediaKey', 'fileEncSha256', 'fileSha256'];
+            for (const field of binaryFields) {
+                const val = sanitizedMediaData[field];
+                if (val) {
+                    if (Buffer.isBuffer(val)) {
+                        sanitizedMediaData[field] = val.toString('base64');
+                    } else if (val instanceof Uint8Array || (val && val.type === 'Buffer')) {
+                        sanitizedMediaData[field] = Buffer.from(val.data || val).toString('base64');
+                    }
+                }
+            }
+
+            payload.data.messages.message[mediaInfo.messageType] = sanitizedMediaData;
 
             this.logger.info('Calling Wasender decrypt-media API', {
                 messageId,
@@ -172,7 +198,7 @@ class MediaDownloadService {
 
             // Retry logic for timeout errors
             if (retryCount < maxRetries && (
-                error.code === 'ECONNABORTED' || 
+                error.code === 'ECONNABORTED' ||
                 error.message.includes('timeout') ||
                 error.response?.status >= 500
             )) {
@@ -181,10 +207,10 @@ class MediaDownloadService {
                     attempt: retryCount + 2,
                     maxRetries: maxRetries + 1
                 });
-                
+
                 // Wait before retry (exponential backoff)
                 await new Promise(resolve => setTimeout(resolve, (retryCount + 1) * 2000));
-                
+
                 return this.decryptMediaWithWasender(messageData, messageId, retryCount + 1);
             }
 
@@ -225,7 +251,7 @@ class MediaDownloadService {
                 mediaData: message.imageMessage
             };
         }
-        
+
         if (message.videoMessage) {
             return {
                 type: 'video',
@@ -233,7 +259,7 @@ class MediaDownloadService {
                 mediaData: message.videoMessage
             };
         }
-        
+
         if (message.audioMessage) {
             return {
                 type: 'audio',
@@ -241,7 +267,7 @@ class MediaDownloadService {
                 mediaData: message.audioMessage
             };
         }
-        
+
         if (message.documentMessage) {
             return {
                 type: 'document',
@@ -249,7 +275,7 @@ class MediaDownloadService {
                 mediaData: message.documentMessage
             };
         }
-        
+
         if (message.stickerMessage) {
             return {
                 type: 'sticker',
@@ -274,12 +300,12 @@ class MediaDownloadService {
             // Generate unique filename
             const fileExtension = this.getFileExtension(mimeType);
             const uniqueFileName = `${messageId}_${Date.now()}${fileExtension}`;
-            
+
             // Determine subdirectory based on media type
             const subDirectory = this.getSubDirectory(mediaType);
             const absolutePath = path.join(this.mediaDirectory, subDirectory, uniqueFileName);
             const relativePath = path.join(subDirectory, uniqueFileName);
-            
+
             this.logger.info('Downloading from public URL', {
                 publicUrl: publicUrl.substring(0, 50) + '...',
                 fileName: uniqueFileName,
@@ -388,7 +414,7 @@ class MediaDownloadService {
         try {
             const fullPath = path.join(this.mediaDirectory, filePath);
             const buffer = await fs.readFile(fullPath);
-            
+
             this.logger.debug('Media file served', {
                 filePath,
                 size: buffer.length
